@@ -40,6 +40,7 @@ from qfluentwidgets import (
 )
 
 import hand_detect
+import logs
 import recognizer
 import tts
 import worker
@@ -577,6 +578,8 @@ def main() -> None:
         help="buka jendela pratinjau terpisah (bbox + landmark)",
     )
     args = parser.parse_args()
+
+    logs.setup_logging(debug=args.debug)
 
     app = QApplication(sys.argv)  # Qt mengabaikan --debug argparse
     # Card TIDAK digelapkan lewat QSS maupun setTheme (keduanya terukur gagal:
