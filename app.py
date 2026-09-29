@@ -90,9 +90,13 @@ class HealthChip(QLabel):
         super().__init__(parent)
         self._label_text = label
         self._fix_text = description
-        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        # Preferred (bukan Maximum): Maximum membuat chip mengecil pas
+        # contents, dan teks panjang jadi terpotong. Dengan Preferred +
+        # wordWrap teks pindah baris.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setWordWrap(True)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.set_state("unchecked")
+        self.set_state("unchecked")   # wajib: tanpa ini chip tampil kosong/biru
 
     def set_state(self, level: str, detail: str = "") -> None:
         """level: ok | warn | bad | unchecked."""
@@ -297,6 +301,8 @@ class MainWindow(QWidget):
         card_box = QVBoxLayout(self.text_card)
         card_box.setContentsMargins(18, 18, 18, 18)
         card_box.setSpacing(6)
+        # Satu label saja: placeholder + huruf yang dikenali. Dulu ada label
+        # kecil kedua dengan teks sama, jadi tampil dobel atas-bawah.
         self.text_label = QLabel(PLACEHOLDER, self.text_card)
         self.text_label.setWordWrap(True)
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -304,9 +310,7 @@ class MainWindow(QWidget):
         tint(self.text_label, "#9099A6")
         self.text_label.setFont(QFont("", self._display_size()))
         card_box.addWidget(self.text_label)
-        self.candidate_label = CaptionLabel(
-            "Tunjukkan isyarat huruf ke kamera", self.text_card
-        )
+        self.candidate_label = CaptionLabel("", self.text_card)
         self.candidate_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tint(self.candidate_label, "#9AA3AE")
         card_box.addWidget(self.candidate_label)
@@ -331,12 +335,18 @@ class MainWindow(QWidget):
             recent_box.addWidget(row)
         root.addWidget(recent)
 
+        # Chip sekarang mewrapping teks dan boleh memakai dua baris di lebar
+        # kecil. Sebelumnya ukuran chip dibatasi hingga "Mikrofon · CABLE
+        # Output" terpotong jadi "Mikrofon · CABLE Outp" — sekarang teks
+        # pindah baris.
         chips = QHBoxLayout()
         chips.setSpacing(8)
         self.chip_cam = HealthChip("Kamera virtual", CAM_FIX, self)
         self.chip_mic = HealthChip("Mikrofon", MIC_FIX, self)
         self.chip_model = HealthChip("Model", MODEL_FIX, self)
         for chip in (self.chip_cam, self.chip_mic, self.chip_model):
+            chip.setWordWrap(True)
+            chip.setMinimumWidth(88)
             chips.addWidget(chip)
         chips.addStretch(1)
         root.addLayout(chips)
@@ -396,7 +406,7 @@ class MainWindow(QWidget):
             self.text_label.setText(PLACEHOLDER)
             tint(self.text_label, "#9099A6")
         if state != STATE_PREPARING and state != STATE_RUNNING:
-            self.candidate_label.setText("Tunjukkan isyarat huruf ke kamera")
+            self.candidate_label.setText("")   # baris kecil: kosong saat idle
 
     def on_toggle(self) -> None:
         if self.state == STATE_RUNNING:
