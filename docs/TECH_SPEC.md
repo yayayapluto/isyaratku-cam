@@ -114,11 +114,13 @@ Max ~600 baris kode inti; kandidat rujukan sebelum menulis kode baru:
    jika ≥ 4 dari 5 identik. Mencegah jitter sajian demo.
 4. **Huruf→kata**: saat label stabil dan berbeda dari label terakhir yang
    diterima → append ke `current_word`, reset `hand_absent_timer`.
-5. **Kalimat otomatis**: 3 detik tanpa huruf BARU (bukan tanpa tangan) →
-   `speak(current_word)` via Piper, lalu buffer dibersihkan dan overlay bersih.
-   Tangan hilang = reset `prev_letter` + smoothing, supaya huruf pertama
-   kata berikutnya tidak tertahan.
-6. Overlay digambar pada frame yang dikirim ke `pyvirtualcam`.
+5. **Kalimat otomatis**: tangan **hilang** ≥ 3 detik → `speak(current_word)`
+   via Piper, lalu buffer dibersihkan dan overlay bersih (FR-07/AC-03).
+   Menahan satu isyarat tetap di frame **tidak** boleh mengucapkan kata yang
+   belum selesai. Tangan hilang juga mereset `prev_letter` + smoothing, supaya
+   huruf pertama kata berikutnya tidak tertahan.
+6. Overlay digambar sebagai **subtitle film**: strip gelap di bawah frame,
+   teks hijau terpusat horizontal, tinggi band ≈ 22% tinggi frame.
 
 Pseudo:
 
@@ -130,13 +132,14 @@ on label:
     if label == last_letter: return          # satu ketukan = satu huruf
     last_letter = label
     word += label
-    last_new = now
+    hand_absent_since = None                  # tangan ada: belum flush
 
 tick():  # tiap frame
     if no_hand:
         last_letter = None; stable.clear()   # huruf pertama kata berikutnya bebas
-    if word and now - last_new >= 3.0:
-        tts.speak(word); word = ""
+        if hand_absent_since is None: hand_absent_since = now
+    if word and hand_absent_since and now - hand_absent_since >= 3.0:
+        tts.speak(word); word = ""; hand_absent_since = None
 ```
 
 ## 5. Integrasi Kamera Virtual + Audio Virtual + Piper
