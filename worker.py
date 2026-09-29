@@ -23,6 +23,7 @@ import tts
 from hand_detect import HandDetector, crop_hand
 
 FPS = 20
+TTS_DRAIN_MAX = 10.0   # detik; drain cukup ~4 kata (~0,98 s/kata)
 BACKEND_ORDER = ("unitycapture", "obs")  # Unity Capture utama, OBS cadangan
 
 
@@ -250,9 +251,9 @@ class Worker:
                 self.tts_error = str(exc)  # video tetap jalan tanpa suara
                 speak = None
             else:
-                # Muat voice + buka thread TTS sebelum webcam dibuka: biaya
-                # sekali jalan (~1,7 s panggilan pertama) di luar loop, jadi
-                # tidak muncul sebagai freeze saat kata pertama terbentuk.
+                # Muat voice SEBELUM loop/pipeline: biaya sekali jalan (~1,7 s)
+                # di luar loop, jadi tidak muncul sebagai freeze saat kata
+                # pertama terbentuk.
                 tts.prewarm()
         self._pipeline = text_pipeline.TextPipeline(speak=speak)
 
@@ -347,7 +348,9 @@ class Worker:
             if self.debug:
                 cv2.destroyAllWindows()
             if self.enable_tts and self.tts_error is None:
-                tts.drain()   # jangan potong kata terakhir saat BERHENTI
+                # drain menunggu daemon selesai; TTS_DRAIN_MAX membatasinya
+                # supaya BERHENTI tak menggantung, tapi tidak memotong kata.
+                tts.drain(TTS_DRAIN_MAX)
             self.running = False
 
 

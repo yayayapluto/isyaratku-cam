@@ -548,7 +548,9 @@ class MainWindow(QWidget):
         self.stop_worker()
         if self.thread is not None:
             self.thread.quit()
-            self.thread.wait(3000)
+            # drain TTS perlu ~0,98 s/kata dan backlog boleh sampai 6 kata:
+            # 3 s dulu selalu memotong suara terakhir. Beri 10,5 s.
+            self.thread.wait(int(worker.TTS_DRAIN_MAX * 1000) + 500)
         event.accept()
 
 

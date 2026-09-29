@@ -8,6 +8,7 @@ entri ganda untuk perangkat yang sama.
 from __future__ import annotations
 import os
 import queue
+import time
 import shutil
 import sys
 import threading
@@ -84,7 +85,10 @@ def prewarm() -> None:
     """Muat voice SEBELUM loop video: pemanggilan pertama ~1,7 s, dan di luar
     loop itu tak terlihat sebagai freeze. Aman dipanggil berulang (no-op)."""
     _ensure_worker()
-    _queue.put("")
+    global _voice
+    with _lock:
+        if _voice is None:
+            _voice = _load_voice()
 
 
 def speak_async(text: str) -> None:
@@ -165,10 +169,24 @@ def speak(text: str) -> None:
     _emit(text)
 
 
-def drain() -> None:
-    """Tunggu semua antrean selesai (dipakai BERHENTI di GUI)."""
-    if _queue is not None:
+def drain(timeout: float = 10.0) -> None:
+    """Tunggu semua antrean selesai (dipakai BERHENTI di GUI).
+
+    Batas waktu di sisi pemanggil: kata yang sudah masuk tetap diputar sampai
+    habis selama waktu cukup; kalau kebot terlampaui, sisa tetap diantre dan
+    daemon melanjutkan memutarnya.
+    """
+    if _queue is None:
+        return
+    selesai = threading.Event()
+
+    def _join() -> None:
         _queue.join()
+        selesai.set()
+
+    threading.Thread(target=_join, daemon=True, name="isyaratku-drain").start()
+    selesai.wait(timeout)
+
 
 if __name__ == "__main__":
     try:
