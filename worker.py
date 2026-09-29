@@ -281,6 +281,7 @@ class Worker:
         crop=None,
         letter: str = "",
         conf: float = 0.0,
+        _sink: Optional[dict] = None,
     ) -> None:
         """Mode debug saja: TIGA jendela.
 
@@ -291,10 +292,8 @@ class Worker:
         3. status — fps terukur, latensi per tahap, buffer kata/kalimat,
            backend vcam, dan antrean TTS.
 
-        Tampilan jendela 1 dibalik supaya terasa seperti cermin (tangan kanan
-        user muncul di kanan jendela). Landmark & bbox DIPETIK lewat (1-x):
-        keduanya diukur pada frame tak dibalik, jadi tanpa pemetaan itu jatuh
-        di sisi yang salah."""
+        `_sink` (opsional): dict tempat ketiga kanvas disimpan supaya skrip
+        verifikasi bisa menyimpan PNG tanpa perlu jendela GUI."""
         if not self.debug:
             return
         show = cv2.flip(frame, 1)
@@ -325,10 +324,12 @@ class Worker:
         # jendela debug 640x480, dan draw_text menskalakan tinggi baris dari
         # font_size — 32px di situ menabrak tepi bawah.
         draw_text(show, text, min(self.font_size, 18))
+        if _sink is not None:
+            _sink["main"] = show
         cv2.imshow("IsyaratKu debug - kamera (tekan q untuk tutup)", show)
 
         # Jendela 2: crop APA ADANYA yang masuk model (tidak dibalik),
-        # di-upscale ke 240px supaya bentuk tangan terbaca.
+        # di-fit ke 240px (diperkecil bila lebih besar, diperbesar bila kecil)
         if crop is None:
             view = np.zeros((240, 240, 3), np.uint8)
             cv2.putText(view, "tidak ada crop", (16, 130),
@@ -336,10 +337,11 @@ class Worker:
         else:
             view = crop
             side = max(view.shape[:2])
-            if side < 240:
+            if side != 240:
+                scale = 240 / side
                 view = cv2.resize(
-                    view, (int(round(view.shape[1] * 240 / side)),
-                           (int(round(view.shape[0] * 240 / side)))),
+                    view, (max(1, int(round(view.shape[1] * scale))),
+                           (max(1, int(round(view.shape[0] * scale))))),
                     interpolation=cv2.INTER_NEAREST)
         if letter:
             cv2.putText(view, f"{letter} {conf:.2f}", (8, 26),
@@ -362,6 +364,8 @@ class Worker:
         cv2.putText(view, f"smoother={''.join(smooth_hist) or '-'}",
                     (8, 122), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1,
                     cv2.LINE_AA)
+        if _sink is not None:
+            _sink["crop"] = view
         cv2.imshow("IsyaratKu debug - crop (tekan q untuk tutup)", view)
 
         # Jendela 3: status satu layar — teks hitam di latar putih, muat 10
@@ -370,8 +374,8 @@ class Worker:
         sentence = self._pipeline.sentence if self._pipeline else ""
         queued = tts.queue_depth() if self.enable_tts else 0
         stage_rows = [
-            (f"{s}={sum(v) / len(v):.1f}" if self._stage_ms[s] else f"{s}=-")
-            for s in STAGES
+            (f"{s}={sum(dq) / len(dq):.1f}" if dq else f"{s}=-")
+            for s, dq in self._stage_ms.items()
         ]
         status = np.full((240, 480, 3), 255, np.uint8)
         _panel(status, [
@@ -383,6 +387,8 @@ class Worker:
             f"vcam backend: {self.backend or '-'}",
             f"antrean TTS: {queued}",
         ], x=10, y=24)
+        if _sink is not None:
+            _sink["status"] = status
         cv2.imshow("IsyaratKu debug - status (tekan q untuk tutup)", status)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):

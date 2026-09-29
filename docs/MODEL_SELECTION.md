@@ -68,9 +68,9 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 | Forward model 260 px (threads torch) | 1/2/4/8 = 112,9/79,0/63,8/60,8 ms | matriks forward miner |
 | Deteksi MediaPipe | 11,8–13,2 ms, tak bergantung resolusi/num_hands | ukur langsung |
 | Settle 3 frame + bbox stabil | simulasi 520 citra: akurasi mayoritas 76,9% (identik Smoother 4-of-5) | simulasi window/streak |
-| Throughput loop — DUA angka terpisah | tangan absen 20,9 fps (capture fast path) · tangan hadir 10,7 fps capture, 108 huruf diterima dalam 12 s (~9 huruf/dtk ceiling dengan detect_every=2) | `scripts/verify_hand_branch.py` + worker `--seconds` |
-| `--seconds N` auto-stop | loop berhenti di deadline, 226 frame pada run 25 s (prewarm voice ~12 s) | worker `--seconds 25` |
-| Debug panel (3 jendela) | dirender 640×480, 240×240, 480×240; 42.288 px panel + 3.429 px overlay + 7 baris status | `logs/panel_main.png`, `logs/panel_status.png` |
+| Throughput loop — DUA angka terpisah | tangan absen 20,9 fps (capture fast path, tanpa crop/model) · tangan hadir 10,7 fps capture (sisi capture, tak terpengaruh) · per frame: ~65–76 `kandidat` per 12 s (~5,4–6,3/dtk) pada replay VOC; `kandidat` = emisi per frame terinferensi, BUKAN huruf diterima — huruf yang benar-benar diterima bergantung gate 0,45 + settle 3 frame, pada replay VOC frame tak stabil sehingga setelah koreksi `huruf=0` | `scripts/verify_hand_branch.py --seconds 12` → baris `RESULT kandidat=` dan `RESULT huruf=`/`huruf_per_s=` (angka tangan HADIR; angka tangan absen 20,9 fps belum punya script reproduksi) |
+| `--seconds N` auto-stop | loop berhenti di deadline, 226 frame pada run 25 s (prewarm voice ~12 s) | `python worker.py --seconds 25` (butuh webcam); jalur stop tanpa perangkat: `python worker.py --self-check` |
+| Debug panel (3 jendela) | dirender 640×480, 240×240, 480×240; 42.288 px panel + 3.429 px overlay + 7 baris status | `scripts/verify_hand_branch.py` menulis `logs/panel_{main,crop,status}.png` (gitignored) |
 
 ## 5. Belum terukur — prasyyat angka akurasi di iklan
 
