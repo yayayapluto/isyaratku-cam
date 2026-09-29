@@ -30,28 +30,42 @@ def main() -> int:
     statuses: list[str] = []
     w = worker_mod.Worker(on_status=statuses.append, enable_tts=False)
 
-    t = threading.Thread(target=w.run, daemon=True)
+    errors: list[str] = []
+
+    def run() -> None:
+        try:
+            w.run()
+        except Exception as exc:  # pragma: no cover - jalur kegagalan nyata
+            errors.append(f"{type(exc).__name__}: {exc}")
+
+    t = threading.Thread(target=run, daemon=True)
     t.start()
 
+    # tunggu worker benar-benar masuk loop (flag, bukan string status)
     deadline = time.time() + TIMEOUT
-    while time.time() < deadline:
-        if any("berjalan" in s for s in statuses):
-            break
-        if w.tts_error or statuses and "gagal" in (statuses[-1] or ""):
-            break
-        time.sleep(0.2)
+    while time.time() < deadline and not w.running and not errors:
+        time.sleep(0.1)
 
-    started = any("berjalan" in s for s in statuses)
+    if errors:
+        print(f"GAGAL worker exception: {errors[-1]}")
+        return 1
+
+    started = w.running
     if started:
-        # biarkan loop berjalan sampai gate terpenuhi atau batas waktu
         end = time.time() + TIMEOUT
         while time.time() < end:
             if w.sent_frames >= MIN_SENT and w.hand_frames > 0:
+                break
+            if errors:
                 break
             time.sleep(0.2)
 
     w.stop()
     t.join(timeout=8)
+
+    if errors:
+        print(f"GAGAL worker exception saat loop: {errors[-1]}")
+        return 1
 
     results = {
         "worker mulai": started,
