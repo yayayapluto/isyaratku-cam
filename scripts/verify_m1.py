@@ -30,15 +30,15 @@ def _spawn_worker() -> subprocess.Popen:
 WORKER = _spawn_worker()
 
 
-def green_subtitle_pixels(frame: np.ndarray) -> int:
-    """Jumlah pixel teks subtitle hijau di strip bawah frame.
+def white_subtitle_pixels(frame: np.ndarray) -> int:
+    """Jumlah pixel teks subtitle putih di area bawah frame.
 
-    Mask dominan hijau (bukan >150 absolut) supaya tahan anti-aliasing di
-    atas latar webcam."""
-    footer = frame[-140:]
+    Overlay putih + outline hitam; mask putih mendeteksi teks, bukan band.
+    Area diambil relatif tinggi frame supaya benar juga di 480p."""
+    footer = frame[-int(frame.shape[0] * 0.15):]
     return int(
-        ((footer[:, :, 1].astype(int) - footer[:, :, 0].astype(int) > 40) &
-         (footer[:, :, 1].astype(int) - footer[:, :, 2].astype(int) > 40)).sum()
+        ((footer[:, :, 0] > 190) & (footer[:, :, 1] > 190) &
+         (footer[:, :, 2] > 190)).sum()
     )
 
 
@@ -51,7 +51,7 @@ def find_virtual_device() -> tuple[int, np.ndarray]:
             continue
         ok, frame = cap.read()
         cap.release()
-        if ok and frame is not None and green_subtitle_pixels(frame) > 50:
+        if ok and frame is not None and white_subtitle_pixels(frame) > 50:
             return idx, frame
     raise RuntimeError("device virtual dengan overlay tidak ditemukan")
 
@@ -84,12 +84,12 @@ try:
     if best is None:
         raise RuntimeError("tidak bisa membaca frame dari device virtual")
 
-    green = green_subtitle_pixels(best)
-    # ambang skala lebar frame: 640x480 mengukur ~414, 1280x720 ~900+
-    threshold = max(50, int(best.shape[1] * 0.4))
-    print(f"pixel hijau di area subtitle: {green} (ambang {threshold})")
-    assert green > threshold, "teks subtitle hijau tidak terdeteksi"
-    print("M1 OK: stream virtual memuat subtitle film di bawah frame")
+    white = white_subtitle_pixels(best)
+    # font=10 pada 640x480 masih memberi ~350 pixel putih; ambang 150 aman
+    threshold = max(150, int(best.shape[1] * 0.2))
+    print(f"pixel putih di area subtitle: {white} (ambang {threshold})")
+    assert white > threshold, "teks subtitle putih tidak terdeteksi"
+    print("M1 OK: stream virtual memuat subtitle putih terpusat di bawah frame")
 finally:
     WORKER.terminate()
     try:

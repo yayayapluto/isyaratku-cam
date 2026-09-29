@@ -52,19 +52,23 @@ def open_webcam() -> cv2.VideoCapture:
 
 
 def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
-    """Posisi subtitle film: strip gelap di bawah, teks hijau di tengahnya."""
+    """Subtitle gaya film: teks putih, outline hitam tebal, terpusat.
+
+    Sesuai referensi: tanpa band gelap, teks langsung di atas gambar.
+    Outline tebal menjaga keterbacaan di latar webcam yang sibuk."""
     if not text:
         return frame
-    h = frame.shape[0]
+    h, w = frame.shape[:2]
     scale = font_size / 20.0
     thick = max(2, int(round(font_size / 7)))
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
-    band = max(60, int(th * 2.2))
-    y0 = h - band
-    cv2.rectangle(frame, (0, y0), (frame.shape[1], h), (15, 15, 15), -1)
-    x = max(10, (frame.shape[1] - tw) // 2)
-    cv2.putText(frame, text, (x, h - int(band * 0.32)),
-                cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 255, 0), thick, cv2.LINE_AA)
+    outline = thick * 2 if thick > 1 else 2
+    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, outline)
+    x = max(10, (w - tw) // 2)
+    y = max(th + 8, h - int(h * 0.08))
+    cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
+                (0, 0, 0), outline, cv2.LINE_AA)
+    cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
+                (255, 255, 255), thick, cv2.LINE_AA)
     return frame
 
 

@@ -119,8 +119,9 @@ Max ~600 baris kode inti; kandidat rujukan sebelum menulis kode baru:
    Menahan satu isyarat tetap di frame **tidak** boleh mengucapkan kata yang
    belum selesai. Tangan hilang juga mereset `prev_letter` + smoothing, supaya
    huruf pertama kata berikutnya tidak tertahan.
-6. Overlay digambar sebagai **subtitle film**: strip gelap di bawah frame,
-   teks hijau terpusat horizontal, tinggi band ≈ 22% tinggi frame.
+6. Overlay digambar sebagai **subtitle film**: teks putih dengan outline hitam
+   tebal, terpusat horizontal, baseline 8% di atas bawah frame. Tanpa band
+   gelap (sesuai referensi `contoh penempatan subtitle.png`).
 
 Pseudo:
 
