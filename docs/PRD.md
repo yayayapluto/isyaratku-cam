@@ -99,10 +99,12 @@ dengan **SDG 3** (kesehatan & kesejahteraan melalui alat bantu komunikasi),
 - **AC-03** Setiap kata terdengar di output VB-Cable ±1,2 detik setelah tangan
   hilang; setelah 3 detik tanpa tangan, kalimat terakhir terlihat di overlay lalu
   buffer kosong dan overlay bersih.
-- **AC-04** OBS menampilkan stream "Unity Capture Camera" dengan overlay teks terbaca.
-- **AC-05** Zoom/Meet: dipilih "Unity Capture Camera" (atau OBS Virtual Camera sebagai
-  fallback) → peserta lain melihat overlay; dipilih "CABLE Output" (VB-Cable) →
-  peserta lain mendengar ucapan.
+- **AC-04** Kamera virtual menampilkan stream dengan overlay teks terbaca.
+  Nama device: **"Unity Video Capture"** (nama asli Unity Capture — bukan
+  "Unity Capture Camera"), atau "OBS Virtual Camera" bila pakai cadangan.
+- **AC-05** Zoom/Meet: dipilih "Unity Video Capture" (atau "OBS Virtual Camera"
+  sebagai fallback) → peserta lain melihat overlay; dipilih "CABLE Output"
+  (VB-Cable) → peserta lain mendengar ucapan.
 - **AC-06** VB-Cable tidak terpasang → status `Error: VB-Cable tidak ditemukan` dan
   aplikasi tidak crash.
 - **AC-07** Model file hilang/di-skip → status `Error: model tidak ditemukan` dengan pesan,
@@ -112,25 +114,30 @@ dengan **SDG 3** (kesehatan & kesejahteraan melalui alat bantu komunikasi),
 ## 7. Wireframe ASCII
 
 ```
-┌────────────────────────────────────────┐
-│  IsyaratKu Cam                     — □ ×│
-├────────────────────────────────────────┤
-│                                        │
-│   ┌──────────────────────────────────┐ │
-│   │                                  │ │
-│   │            ▶  START              │ │   ← tombol besar
-│   │                                  │ │
-│   └──────────────────────────────────┘ │
-│                                        │
-│   Status: ● Berjalan                   │   ← Berhenti / Berjalan / Error + pesan
-│                                        │
-│   Ukuran font overlay:  [=====•-----]  │   ← satu slider
-│                                        │
-└────────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│  IsyaratKu Cam                       Pin │
+├──────────────────────────────────────────┤
+│  ● Berjalan                              │  ← badge berwarna + spinner
+│                                          │
+│  ┌────────────────────────────────────┐  │
+│  │        Teks sekarang (besar)       │  │  ← 28-32pt, tengah, wrap
+│  │        Kandidat: A                 │  │  ← huruf kandidat terkini
+│  └────────────────────────────────────┘  │
+│                                          │
+│  Diucapkan terakhir                      │  ← maks 3 kalimat
+│   - APA KABAR                            │
+│                                          │
+│  Ukuran teks:   ( S )( M )( L )          │  ← segmented, ganti slider
+│  [Kamera virtual] [Mikrofon] [Model]     │  ← chip + tooltip perbaikan
+│                                          │
+│  ┌────────────────────────────────────┐  │
+│  │              MULAI                  │  │  ← permanen, merah saat jalan
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
 ```
 
 Tidak ada preview video, tidak ada dropdown, tidak ada halaman lain.
-Output (frame + overlay) hanya terlihat di OBS/Zoom/Meet.
+Output (frame + overlay) hanya terlihat di kamera virtual (Zoom/Meet).
 
 ## 8. Out of Scope
 

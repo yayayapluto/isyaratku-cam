@@ -72,7 +72,7 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 
 ## 6. Mode debug (opsional)
 
-Checkbox "Mode debug" di `main.py` membuka jendela pratinjau: bbox magenta +
+Flag `--debug` (`python app.py --debug`) membuka jendela pratinjau: bbox magenta +
 landmark kuning + ukuran crop + huruf + overlay identik dengan output.
 Berguna untuk membedakan "model salah" dari "crop jelek / tangan jauh".
 

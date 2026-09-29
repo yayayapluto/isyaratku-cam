@@ -19,7 +19,7 @@ bash scripts/download_models.sh      # bobot model A-Z + voice Piper (~63MB), ti
 python scripts/check_env.py          # cek device virtual + file model + espeak-ng
 
 # Run
-python main.py
+python app.py
 
 # Test model seleksi (M2)
 python scripts/test_webcam.py
@@ -29,7 +29,7 @@ python scripts/test_webcam.py
 
 ```
 docs/        PRD.md TECH_SPEC.md BUILD_ORDER.md MODEL_SELECTION.md
-main.py      GUI PySide6: tombol start/stop, status, slider font
+app.py      GUI PySide6: tombol start/stop, badge status, S/M/L, chip kesehatan
 worker.py    thread kerja: capture, deteksi, recognizer, overlay, vcam send
 recognizer.py  load model PyTorch + prediksi + smoothing 4-of-5
 text_pipeline.py huruf -> kata -> kalimat + timer: kata (1,2dtk) / kalimat (3dtk)
@@ -67,7 +67,8 @@ saat mengerjakan milestone. ID `FR-xx`/`AC-xx` konsisten antar dokumen.
 ## Prasyarat lingkungan (di luar pip)
 
 - Unity Capture: `Install.bat` sebagai Administrator (DirectShow filter, tanpa test
-  mode). Nanti muncul sebagai kamera "Unity Capture Camera".
+  mode). Nanti muncul sebagai kamera "Unity Video Capture"
+  (nama device sebenarnya — bukan "Unity Capture Camera").
 - VB-Cable: installer resmi. Nanti muncul sebagai "CABLE Output" (input) /
   "CABLE Input" (output).
 - espeak-ng: wajib untuk fonemisasi voice `id_ID` di Piper.
@@ -96,7 +97,7 @@ saat mengerjakan milestone. ID `FR-xx`/`AC-xx` konsisten antar dokumen.
 
 ## Verifikasi minimal sebelum commit
 
-- Jalankan yang terpengaruh: `python main.py` atau `python scripts/check_env.py`.
+- Jalankan yang terpengaruh: `python app.py` atau `python scripts/check_env.py`.
 - Smoke: klik Start → status `Berjalan`; stream tampil di OBS.
 - Bila perubahan menyentuh overlay/TTS, ulangi checklist di
   `docs/BUILD_ORDER.md`.

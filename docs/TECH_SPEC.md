@@ -77,7 +77,7 @@ isyaratku_cam/
 ├── docs/                 # PRD.md TECH_SPEC.md BUILD_ORDER.md
 ├── AGENTS.md
 ├── requirements.txt
-├── main.py               # entrypoint: GUI + start/stop
+├── app.py                # entrypoint: GUI + start/stop
 ├── worker.py             # thread kamera+AI+overlay+vcam
 ├── recognizer.py         # load model + prediksi + smoothing
 ├── text_pipeline.py      # huruf -> kata -> kalimat + timer
@@ -94,7 +94,7 @@ isyaratku_cam/
 
 | Modul | Tanggung jawab | Tidak boleh |
 |---|---|---|
-| `main.py` | GUI, status, start/stop, pasang worker | logika AI |
+| `app.py` | GUI, badge status, tombol, chip kesehatan, S/M/L, flag --debug | logika AI |
 | `worker.py` | loop frame, deteksi tangan, panggil recognizer & text_pipeline, kirim overlay ke vcam | punya rule bisnis teks |
 | `recognizer.py` | load model PyTorch, `predict(frame) -> label` | akses cv2/UI |
 | `text_pipeline.py` | state huruf/kata/kalimat + timer jeda | operasi frame |
@@ -154,9 +154,11 @@ tick():  # tiap frame (termasuk cabang tanpa tangan!)
 
 ## 5. Integrasi Kamera Virtual + Audio Virtual + Piper
 
-**Kamera virtual.** Output utama = **OBS Virtual Camera** (dipakai Zoom/Meet),
-diikuti Unity Capture bila OBS tidak jalan (`BACKEND_ORDER = ("obs",
-"unitycapture")`). Uji video lewat self-view Zoom/Meet, bukan OBS.
+**Kamera virtual.** Output utama = **Unity Video Capture** (Unity Capture,
+dipakai Zoom/Meet), dengan **OBS Virtual Camera** sebagai cadangan bila Unity
+tidak terpasang (`BACKEND_ORDER = ("unitycapture", "obs")`). Nama backend
+aktif dilaporkan ke GUI lewat signal `health`.
+Uji video lewat self-view Zoom/Meet, bukan OBS.
 
 ```python
 import pyvirtualcam
@@ -182,7 +184,8 @@ device = next(i for i,d in sd.query_devices().items()
 sd.play(audio_int16, samplerate=22050, device=device)
 ```
 
-**Tidak ada dropdown** kamera/audio di GUI. Device salah/absen → status Error.
+**Tidak ada dropdown** kamera/audio di GUI. Device salah/absen → status Error
+plus kartu merah berisi langkah perbaikan dan tombol "Coba lagi".
 
 ## 6. Kandidat Model & Cara Tes
 
@@ -206,7 +209,7 @@ Semua hasil tes dicatat di `docs/MODEL_SELECTION.md` (milestone M2).
 
 | Kondisi | Perilaku |
 |---|---|
-| Driver kamera virtual tidak terpasang | Status `Error: kamera virtual tidak ditemukan (pasang Unity Capture)`, worker berhenti rapi |
+| Kamera virtual tidak ditemukan (Unity Capture & OBS dua-duanya absen) | Status Error: `Kamera virtual tidak ditemukan. Jalankan Install.bat Unity Capture sebagai Administrator, lalu restart aplikasi. Cadangan: pasang OBS.`, worker berhenti rapi |
 | VB-Cable tidak terpasang | Status `Error: VB-Cable tidak ditemukan`, pipeline tetap jalan, hanya TTS yang mati |
 | File model / voice hilang | Status `Error: model tidak ditemukan`, stop otomatis |
 | Webcam tidak terbaca | Status `Error: webcam tidak ditemukan` |
@@ -238,9 +241,11 @@ python scripts/check_env.py
 ```
 
 Driver Windows dipasang manual oleh pengguna (README menyertakan instruksi).
-Di Zoom/Meet: kamera = "Unity Capture Camera", mikrofon = "CABLE Output" (VB-Cable).
-Kalau Unity Capture tidak muncul setelah `Install.bat` (Admin), fallback ke
-OBS Virtual Camera.
+Di Zoom/Meet: kamera = "Unity Video Capture" (nama device Unity Capture),
+mikrofon = "CABLE Output" (VB-Cable). Nama device Unity adalah **Unity Video
+Capture**, bukan "Unity Capture Camera". Kalau Unity Capture tidak muncul
+setelah `Install.bat` (Admin), worker otomatis fallback ke
+"OBS Virtual Camera"; pembeda hanya nama device di pemilih kamera Zoom/Meet.
 
 **Lisensi:** repo model `Syizuril/bisindo-sign-language` publik, tanpa token,
 tapi lisensi tidak tertulis — bobot hanya diunduh, tidak didistribusikan ulang.
@@ -251,6 +256,7 @@ catat di README sebelum distribusi ke pihak lain.
 
 ```bash
 python scripts/check_env.py            # device virtual + file model ada
-python main.py                          # klik Start → status Berjalan
-# Bukti end-to-end: OBS tampilkan stream dengan overlay; Zoom/Meet dengar TTS
+python app.py                           # klik MULAI → status Berjalan
+python app.py --debug                   # tambah jendela pratinjau terpisah
+# Bukti end-to-end: Zoom/Meet tampilkan stream dengan overlay dan dengar TTS
 ```

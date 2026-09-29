@@ -19,7 +19,8 @@ webcam (native res) → flip → MediaPipe Hands (num_hands=2)
   → EfficientNet-B3 A–Z → confidence
   → Smoother 4-dari-5 (recognizer.py)
   → huruf → kata → kalimat (text_pipeline.py)
-  → overlay subtitle putih, wrap baris (worker.py) → OBS Virtual Camera
+  → overlay subtitle putih, wrap baris (worker.py) → Unity Video Capture
+                        (Unity Capture utama, OBS Virtual Camera cadangan)
                         └→ tangan absen 1,2 dtk → Piper TTS per KATA → VB-Cable
 ```
 
@@ -43,7 +44,7 @@ satu kata — jeda antar-huruf lebih dari itu akan memecah kata.
 
 | File | Tanggung jawab |
 |---|---|
-| `main.py` | GUI PySide6/qfluentwidgets: tombol MULAI/BERHENTI, slider ukuran font, checkbox Mode debug. Thread worker dipisah dari UI. |
+| `app.py` | GUI PySide6/qfluentwidgets: tombol MULAI/HENTIKAN, badge status, chip kesehatan, S/M/L. Thread worker dipisah dari UI. |
 | `worker.py` | Loop utama: buka webcam → deteksi → klasifikasi → smoothing → overlay → kirim ke kamera virtual. `draw_text()` adalah satu-satunya penerjemah teks (dipakai debug & produksi). |
 | `hand_detect.py` | `HandDetector` (MediaPipe Tasks, `num_hands=2`, singleton modul) dan `crop_hand()` (bbox + padding 20px, letterbox ke persegi). |
 | `recognizer.py` | `build_model()` memuat bobot EfficientNet-B3 + urutan label; `preprocess()` normalisasi 224×224; `Smoother()` kebijakan 4-dari-5. |
@@ -63,32 +64,38 @@ python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Prasyarat di luar pip:
-# 1. OBS Studio — "OBS Virtual Camera" (kamera virtual output utama).
-# 2. VB-Cable — https://vb-audio.com/Cable/  → mikrofon virtual "CABLE Output".
-# 3. espeak-ng — fonemisasi voice id_ID di Piper; sudah lokal di
+# 1. Unity Capture — "Unity Video Capture" (kamera virtual output UTAMA).
+#    Pasang lewat Install.bat di folder repo sebagai Administrator.
+# 2. OBS Studio — "OBS Virtual Camera" (kamera virtual CADANGAN).
+# 3. VB-Cable — https://vb-audio.com/Cable/  → mikrofon virtual "CABLE Output".
+# 4. espeak-ng — fonemisasi voice id_ID di Piper; sudah lokal di
 #    tools/espeak-ng/ (hasil extract MSI, tidak masuk PATH).
 
 bash scripts/download_models.sh   # bobot A-Z (~44MB) + voice Piper (~63MB) + hand landmarker (~7,5MB)
 python scripts/check_env.py       # 6 cek: VB-Cable, model A-Z, model tangan, voice, espeak-ng, kamera virtual
-python main.py                    # Start / Stop + slider ukuran font overlay
+python app.py                    # MULAI / HENTIKAN + ukuran S/M/L + debug: app.py --debug
 ```
 
-**Nyalakan OBS Virtual Camera sebelum MULAI** (OBS → *Controls → Start Virtual
-Camera*). Worker membatalkan sendiri dengan pesan jelas kalau device tidak aktif.
+Worker mencari kamera virtual urut: **Unity Video Capture** dulu, kalau tidak
+ada **OBS Virtual Camera**. Kalau dua-duanya belum aktif, MULAI batal dengan
+pesan perbaikan. Kalau yang dipakai cadangan, nyalakan OBS → *Controls → Start
+Virtual Camera*.
 
 ---
 
 ## Pakai aplikasi
 
-1. `python main.py` → **MULAI**.
+1. `python app.py` → **MULAI**.
 2. Isyaratkan huruf satu per satu; pause pendek cukup untuk menambah huruf.
 3. Turunkan tangan ±1,2 detik → **kata** diucapkan dan masuk kalimat; overlay tetap menampilkan kalimat + kata berikutnya. Tangan turun ±3 detik → kalimat selesai, overlay bersih.
-4. Slider mengatur ukuran font overlay (10–32, langsung berlaku saat jalan).
-5. **Mode debug** (opsional): centang sebelum MULAI → jendela CCTV dengan bbox
-   magenta, landmark kuning, ukuran crop, dan teks overlay. `q` menutup jendela
-   dan menghentikan worker.
+4. Segmented **S/M/L** mengatur ukuran font overlay (14/22/32, langsung berlaku
+   saat jalan).
+5. **Debug** (opsional): `python app.py --debug` → jendela pratinjau terpisah
+   dengan bbox magenta, landmark kuning, ukuran crop, dan teks overlay. `q`
+   menutup jendela dan menghentikan worker.
 
-Di Zoom/Meet: kamera = **"OBS Virtual Camera"**, mikrofon = **"CABLE Output"**.
+Di Zoom/Meet: kamera = **"Unity Video Capture"** (atau "OBS Virtual Camera"
+kalau dipakai cadangan), mikrofon = **"CABLE Output"**.
 
 ---
 
