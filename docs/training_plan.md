@@ -99,6 +99,15 @@ tiap dataset diverifikasi manual.
   mentah): kemunculan pertama menang, duplikat dilewati dan dihitung di baris
   `dilewati` sumber tersebut. Diverifikasi deterministik: build dua kali →
   MD5 pohon output identik.
+  Resep digest (dijalankan dari akar repo, deterministik pada
+  `data/finetune` setelah build): `cd data/finetune && find . -type f \( -name
+  '*.jpg' \) -printf '%P\n' | sort | xargs -I{} sh -c 'md5sum "{}"' | awk
+  '{print $1}' | md5sum` → **`87efbd61ebda5d82625d8d7b4aa75515`**, diukur ulang
+  identik setelah build kedua; cakupan **1.703 berkas `.jpg`** (1.362 train +
+  341 val). Nilai itu hanya berlaku untuk resep di atas dan untuk sumber &
+  konfigurasi split saat ini (4 sumber sama, `--val-split 0.2 --seed 42`);
+  digest lain yang pernah dikutip memakai resep berbeda (daftar relpath+MD5,
+  atau menghitung 9 berkas sisa) sehingga tidak bisa dibandingkan.
 - Staging rhio deterministik & bebas salinan: berkas VOC bernama `" - Copy"`
   dilewati (`scripts/build_dataset.py`), dan hanya SATU base VOC per root
   yang dipakai (base pertama yang punya `.xml` menang).
