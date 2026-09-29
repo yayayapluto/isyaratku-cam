@@ -52,8 +52,21 @@ def voice_files() -> tuple[bool, str]:
     return True, d
 
 
+def hand_files() -> tuple[bool, str]:
+    p = os.path.join(ROOT, "models", "hand", "hand_landmarker.task")
+    return os.path.isfile(p), "jalankan scripts/download_models.sh"
+
+
 def espeak() -> tuple[bool, str]:
-    return shutil.which("espeak-ng") is not None, "pasang espeak-ng (fonemisasi Piper id_ID)"
+    # cek persis seperti tts.py: PATH dulu, lalu kopi lokal tools/espeak-ng/
+    if shutil.which("espeak-ng"):
+        return True, "tersedia di PATH"
+    local = os.path.join(
+        ROOT, "tools", "espeak-ng", "eSpeak NG", "espeak-ng.exe"
+    )
+    if os.path.isfile(local):
+        return True, f"tersedia lokal ({os.path.relpath(local, ROOT)})"
+    return False, "extract MSI espeak-ng ke tools/espeak-ng/ (lihat README)"
 
 
 def vcam_backend() -> tuple[bool, str]:
@@ -74,6 +87,7 @@ def main() -> int:
     for label, fn in (
         ("VB-Cable (CABLE Output/Input)", cable_device),
         ("Model A-Z", model_files),
+        ("Model tangan (MediaPipe)", hand_files),
         ("Voice Piper", voice_files),
         ("espeak-ng", espeak),
         ("Kamera virtual", vcam_backend),

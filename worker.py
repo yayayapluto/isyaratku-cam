@@ -48,11 +48,13 @@ def open_webcam() -> cv2.VideoCapture:
     return cap
 
 
-def draw_text(frame: np.ndarray, text: str) -> np.ndarray:
-    cv2.rectangle(frame, (0, 0), (WIDTH, 90), (20, 20, 20), -1)
+def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
     if text:
-        cv2.putText(frame, text, (20, 62), cv2.FONT_HERSHEY_SIMPLEX, 1.4,
-                    (0, 255, 0), 3, cv2.LINE_AA)
+        # skala 1.0 ~ 22pt; header dibuat mengikuti ukuran font terpilih
+        header = max(90, font_size * 2 + 45)
+        cv2.rectangle(frame, (0, 0), (WIDTH, header), (20, 20, 20), -1)
+        cv2.putText(frame, text, (20, int(header * 0.7)), cv2.FONT_HERSHEY_SIMPLEX,
+                    font_size / 20.0, (0, 255, 0), 3, cv2.LINE_AA)
     return frame
 
 
@@ -63,9 +65,11 @@ class Worker:
         self,
         on_status: Optional[Callable[[str], None]] = None,
         enable_tts: bool = True,
+        font_size: int = 22,
     ) -> None:
         self.on_status = on_status
         self.enable_tts = enable_tts
+        self.font_size = font_size
         self.running = False
         self._model: Optional[tuple] = None
         self._pipeline: Optional[text_pipeline.TextPipeline] = None
@@ -128,7 +132,7 @@ class Worker:
                 if marks is None:
                     self._pipeline.clear_hand()   # tangan hilang -> huruf berganti
                     smoother.reset()
-                    draw_text(frame, self._pipeline.text)
+                    draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
                     cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                     cam.sleep_until_next_frame()
@@ -149,7 +153,7 @@ class Worker:
                     self._status(spoken)
 
                 self.sent_frames += 1
-                draw_text(frame, self._pipeline.text)
+                draw_text(frame, self._pipeline.text, self.font_size)
                 cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 cam.sleep_until_next_frame()
                 self._status(self._pipeline.text)
