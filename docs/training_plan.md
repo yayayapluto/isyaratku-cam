@@ -124,6 +124,11 @@ python scripts/build_dataset.py \
 1. Validasi `data/finetune/val`: metrik otomatis saat ini hanya `val_acc`
    dari `scripts/train_finetune.py` (per epoch, tercetak ke stdout) —
    confusion matrix 26×26 per huruf **belum ada skripnya** (gap, lihat §10).
+   Catatan: `val_acc` pada `data/finetune/val` **tidak setara** dengan
+   baseline 68,65% — angka itu berasal dari crop landmark bbox VOC sintetis
+   (`eval_offline.py`), sementara crop sumber folder dibuat dari deteksi
+   MediaPipe nyata (`build_dataset.py`); angka 68,65% hanya berlaku sebagai
+   pembanding untuk holdout webcam (G2).
 2. **Gate akhir: `python scripts/test_letters.py` di webcam** (kamera &
    cahaya sama dengan skenario a). Fine-tune hanya mengganti
    `models/bisindo_alphabet/` bila **mengalahkan 68,65%** pada holdout
