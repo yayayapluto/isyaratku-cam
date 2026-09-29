@@ -163,7 +163,11 @@ class Worker:
         """
         if not self.debug:
             return
-        show = frame.copy()
+        # Webcam (driver Windows) mengirim frame sudah terlihat mirror; dibalik
+        # sekali supaya jendela debug seperti cermin biasa. Landmark & crop
+        # tetap berasal dari frame TAK dibalik, jadi petunjuk deteksi tidak
+        # ikut bergeser; yang dibalik hanya gambar siap tampil.
+        show = cv2.flip(frame, 1)
         for x, y in marks if marks else []:
             cv2.circle(show, (int(x * show.shape[1]), int(y * show.shape[0])), 3,
                        (0, 255, 255), -1)

@@ -106,11 +106,21 @@ class HealthChip(QLabel):
             "bad": "#C62C30",
             "unchecked": "#3A3F45",
         }[level]
-        detail_line = f"\n{detail}" if detail and level != "unchecked" else ""
-        self.setText(self._label_text + detail_line)
+        # HTML: dua baris dalam satu blok rata tengah. Baris detail lebih
+        # kecil supaya chip tetap satu baris (3 kolom sama lebar) dan label
+        # utama tetap terbaca penuh.
+        detail_html = (
+            f"<div style=\"font-size:7pt; opacity:0.85;\">{detail}</div>"
+            if detail and level != "unchecked" else ""
+        )
+        self.setText(
+            f"<div style=\"font-size:9pt;\">{self._label_text}</div>"
+            f"{detail_html}"
+        )
+        self.setTextFormat(Qt.TextFormat.RichText)
         self.setStyleSheet(
             f"HealthChip {{ background: {color}; border-radius: 6px;"
-            f" padding: 5px 4px; font-size: 10pt; color: white; }}"
+            f" padding: 5px 4px; color: white; }}"
         )
         self.setAlignment(
             Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
