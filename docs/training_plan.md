@@ -152,6 +152,10 @@ python scripts/build_dataset.py \
    sebagai `<LETTER>/NNNN.jpg` (diberi nama baru), jadi provenance hilang.
    Ekstraksi perlu menjalankan ulang build dengan tag sumber per crop
    (perubahan kode), bukan filter pasca-facto.
+
+   Catatan: smoke test tanpa split val tetap bisa — hapus folder
+   `data/finetune/val` supaya `_splits_for()` memakai `train/` sebagai val
+   (val=train); folder `val/` yang ADA tapi kosong ditolak exit 1.
 2. **Gate akhir: `python scripts/test_letters.py` di webcam** (kamera &
    cahaya sama dengan skenario a). Fine-tune mengganti
    `models/bisindo_alphabet/` hanya bila mengalahkan hasil webcam model
