@@ -82,7 +82,7 @@ def correct_word(distributions: list[dict[str, float]]) -> tuple[str, bool]:
     if is_valid(guess):
         return guess.lower(), False
     best_cand: Optional[str] = None
-    best_score = 0.0
+    best_score: Optional[float] = None
     for cand in _by_len().get(len(guess), []):
         score = 0.0
         for pos, probs in enumerate(distributions):
