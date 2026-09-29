@@ -10,7 +10,8 @@ tetapi tidak dapat berbicara. Subtema: **"Akses untuk Semua"** (SDG 3, 10, 16).
 
 ## Status
 
-Fase perencanaan. Milestone dan urutan build: [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md).
+M1 selesai — walking skeleton webcam → overlay → OBS Virtual Camera jalan
+(diuji E2E). Milestone & urutan build: [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md).
 
 ## Setup
 
@@ -19,11 +20,12 @@ python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Prasyarat di luar pip:
-# 1. Unity Capture — Install.bat sebagai Administrator (DirectShow filter)
-#    https://github.com/schellingb/UnityCapture
-# 2. VB-Cable — https://vb-audio.com/Cable/
+# 1. OBS Studio — untuk "OBS Virtual Camera" (kamera virtual output utama).
+#    Start Virtual Camera agar device aktif di Zoom/Meet.
+# 2. VB-Cable — https://vb-audio.com/Cable/  → mikrofon virtual "CABLE Output".
 # 3. espeak-ng — wajib untuk fonemisasi voice id_ID di Piper
 #    https://github.com/espeak-ng/espeak-ng/releases
+#    (OPSIONAL, tertunda: Unity Capture https://github.com/schellingb/UnityCapture)
 
 bash scripts/download_models.sh   # bobot model A-Z + voice Piper (~63MB)
 python scripts/check_env.py       # cek device virtual + file model + espeak-ng
@@ -32,17 +34,18 @@ python main.py
 
 ## Prasyarat lingkungan
 
-| Komponen | Fungsi | Cara pasang |
+| Komponen | Fungsi | Cara pasang / status |
 |---|---|---|
-| Unity Capture | kamera virtual "Unity Capture Camera" (terlihat di OBS) | `Install.bat` sebagai Administrator — DirectShow filter, tanpa test mode |
-| OBS Studio | tes di Zoom/Meet (fallback kamera virtual) | installer resmi; pakai "Start Virtual Camera" |
-| VB-Cable | mikrofon virtual "CABLE Output" | installer resmi |
-| espeak-ng | fonemisasi voice Indonesia Piper | installer `.exe` dari release GitHub |
+| OBS Studio | kamera virtual utama "OBS Virtual Camera" | installer resmi; "Start Virtual Camera" — **TERPASANG** |
+| VB-Cable | mikrofon virtual "CABLE Output" | installer resmi — **TERPASANG** |
+| espeak-ng | fonemisasi voice Indonesia Piper | installer `.exe` dari release GitHub — **BELUM TERPASANG** |
+| Unity Capture | kamera virtual alternatif bila OBS VC bermasalah | `Install.bat` sebagai Administrator — **DITUNDA, OPSIONAL** |
 | Model A-Z | bobot EfficientNet-B3 dari `Syizuril/bisindo-sign-language` | `scripts/download_models.sh` |
 | Voice Piper | `id_ID-news_tts-medium` (ONNX) | `scripts/download_models.sh` |
 
-Di Zoom/Meet: kamera = "Unity Capture Camera" (fallback: OBS Virtual Camera),
-mikrofon = "CABLE Output".
+Di Zoom/Meet: kamera = "OBS Virtual Camera", mikrofon = "CABLE Output".
+Tes lewat self-view Zoom/Meet. Playback TTS ke "CABLE Input" — pilih host API
+WASAPI (48 kHz, 2 kanal); MME/DirectSound mendaftar entri ganda.
 
 ## Peringatan lisensi [PERLU DICEK]
 
