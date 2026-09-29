@@ -129,9 +129,8 @@ def _emit(text: str) -> None:
 
     # Mode debug: keluarkan ke speaker nyata supaya bisa didengar saat
     # kembangkan (CABLE Input cuma didengar aplikasi seperti Zoom/Meet).
-    # query_devices(None) mengembalikan seluruh tabel device — indeks default
-    # harus diresolve dulu, kalau tidak TypeError.
-    import sounddevice as sd
+    # Indeks default diresolve dulu: query_devices(None) mengembalikan
+    # seluruh tabel device, bukan info default output.
 
     device = sd.default.device[1] if DEBUG_MONITOR else cable_output_device()
     dst_rate = int(sd.query_devices(device)["default_samplerate"])
