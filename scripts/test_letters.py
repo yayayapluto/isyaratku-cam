@@ -52,7 +52,8 @@ def measure_letter(model, labels, detector, cap, letter: str) -> dict | None:
         ok, frame = cap.read()
         if not ok:
             continue
-        frame = cv2.flip(frame, 1)
+        # TIDAK di-flip: worker mengirim crop tak dicermin, dan A/B terukur
+        # (docs/results_m_flip.json) menunjukkan asli > flip 4,6 poin.
         if FULL_FRAME:
             tensor = recognizer.preprocess(frame)
         else:

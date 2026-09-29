@@ -40,7 +40,8 @@ def main() -> int:
         ok, frame = cap.read()
         if not ok:
             continue
-        frame = cv2.flip(frame, 1)
+        # TIDAK di-flip: sama dengan pipeline produk (lihat catatan di
+        # scripts/test_letters.py dan docs/results_m_flip.json).
         with torch.no_grad():
             logits = model(preprocess(frame))
             probs = torch.softmax(logits, dim=1)[0]
