@@ -11,7 +11,6 @@ from typing import Optional
 
 import numpy as np
 
-
 import logs
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -71,19 +70,19 @@ class HandDetector:
 def crop_hand(
     frame_bgr: np.ndarray, landmarks: list[tuple[float, float]]
 ) -> Optional[np.ndarray]:
-    """Crop bbox tangan + padding, lalu letterbox ke persegi.
+    """Crop bbox tangan + PADDING, lalu letterbox ke persegi.
 
-    Letterbox: rasio aspek asli dipertahankan (padding tepi), supaya tangan
-    tinggi tidak gepeng saat di-resize 224x224 di recognizer.preprocess.
-    Kembalikan None kalau hasil crop jauh lebih kecil dari MIN_CROP.
-    """
+    Frame webcam tidak dibalik (worker mengirim apa adanya); koordinat
+    landmark sudah relatif 0..1 sehingga cocok untuk kedua orientasi.
+    Letterbox menjaga aspek rasio: squash TINGGI×LEBAR merusak bentuk huruf.
+    Return None kalau crop terlalu kecil (tangan jauh) atau di luar frame."""
     h, w = frame_bgr.shape[:2]
-    xs = [x * w for x, _ in landmarks]
-    ys = [y * h for _, y in landmarks]
-    x0 = max(0, int(min(xs)) - PADDING)
-    y0 = max(0, int(min(ys)) - PADDING)
-    x1 = min(w, int(max(xs)) + PADDING)
-    y1 = min(h, int(max(ys)) + PADDING)
+    xs = [x for x, _ in landmarks]
+    ys = [y for _, y in landmarks]
+    x0 = max(0, int(min(xs) * w) - PADDING)
+    y0 = max(0, int(min(ys) * h) - PADDING)
+    x1 = min(w, int(max(xs) * w) + PADDING)
+    y1 = min(h, int(max(ys) * h) + PADDING)
     if x1 <= x0 or y1 <= y0:
         return None
     crop = frame_bgr[y0:y1, x0:x1]
@@ -98,11 +97,39 @@ def crop_hand(
     return out
 
 
+def _self_check() -> None:
+    """Uji crop_hand tanpa kamera: bbox sintetis, letterbox, guard ukuran."""
+    frame = np.zeros((480, 640, 3), np.uint8)
+    # tangan lebar (bentuk tipikal huruf BISINDO): crop harus jadi persegi
+    # dengan di atas-bawahnya hitam, bukan gepeng.
+    wide = [(0.2, 0.4), (0.2, 0.6), (0.8, 0.6), (0.8, 0.4)]
+    out = crop_hand(frame, wide)
+    assert out is not None
+    ch, cw = out.shape[:2]
+    assert ch == cw, f"letterbox wajib persegi, dapat {ch}x{cw}"
+    # landmark sangat dekat -> crop di bawah MIN_CROP
+    tiny = [(0.5, 0.5), (0.51, 0.51)]
+    assert crop_hand(frame, tiny) is None, "crop mungil wajib ditolak"
+    # landmark di luar frame -> clamp, bukan error
+    off = [(-0.5, -0.5), (1.5, 1.5)]
+    assert crop_hand(frame, off) is not None
+    print(f"crop_hand: letterbox {cw}x{ch}, guard kecil & luar frame OK")
+
+
 if __name__ == "__main__":
+    import sys
+
     import cv2
+
+    _self_check()
+    if "--auto" in sys.argv:
+        print("hand_detect self-check OK (crop_hand, tanpa kamera)")
+        sys.exit(0)
 
     detector = HandDetector()
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        raise SystemExit("webcam tidak terbuka")
     print("tunjukkan tangan, q untuk keluar")
     frames_with_hand = 0
     total = 0
