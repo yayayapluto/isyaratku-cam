@@ -125,8 +125,8 @@ def last_error() -> str:
 
 
 def _tts_worker() -> None:
-    global _last_error
-    _com_init()  # WASAPI butuh COM di thread ini; tanpa ini audio mati total
+    # COM diinisialisasi di _emit() (idempoten) supaya SEMUA jalur playback
+    # — main thread maupun thread daemon — bisa menyalakan stream WASAPI.
     while True:
         text = _queue.get()
         try:
@@ -142,7 +142,7 @@ def _tts_worker() -> None:
 
 
 def _emit(text: str) -> None:
-    """Ucapkan teks, blocking (thread khusus TTS, bukan thread video)."""
+    _com_init()  # WASAPI butuh COM di thread pemanggil; tanpa ini audio mati total
     text = text.strip()
     if not text:
         return
@@ -171,6 +171,13 @@ def _emit(text: str) -> None:
         audio = np.interp(
             np.linspace(0, len(audio) - 1, n), np.arange(len(audio)), audio
         )
+
+    # Fade out supaya suara tak berhenti mendadak (tak terdengar "terpotong").
+    # 150 ms: 80 ms masih menyisakan klik kecil di beberapa kata.
+    fade = int(0.15 * dst_rate)
+    if len(audio) > fade:
+        audio[-fade:] *= np.linspace(1, 0, fade)
+
     sd.play(
         np.clip(audio, -32768, 32767).astype(np.int16),
         samplerate=dst_rate, device=device, blocking=True,
