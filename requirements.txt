@@ -1,0 +1,9 @@
+opencv-python
+mediapipe
+numpy
+pyvirtualcam
+sounddevice
+piper-tts
+torch
+PySide6
+PySide6-Fluent-Widgets
