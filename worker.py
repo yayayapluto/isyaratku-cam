@@ -154,7 +154,12 @@ class Worker:
         self.running = False
 
     def _preview(self, frame, marks, text: str, crop=None) -> None:
-        """Mode debug saja: jendela debug dengan bbox + keterangan deteksi."""
+        """Mode debug saja: jendela debug dengan bbox + keterangan deteksi.
+
+        Tampilan TIDAK dibalik (apa adanya), sedangkan crop yang masuk ke
+        model DIBALIK — sesuai instruksi user. Landmark diukur pada frame tak
+        dibalik ini juga, jadi bbox jatuh persis di atas tangan.
+        """
         if not self.debug:
             return
         show = frame.copy()
@@ -169,9 +174,17 @@ class Worker:
         crop_note = "-" if crop is None else f"{crop.shape[1]}x{crop.shape[0]}px"
         tts_note = "TTS: mati" if not self.enable_tts else (
             f"TTS: error ({self.tts_error})" if self.tts_error else "TTS: aktif")
-        cv2.putText(show, f"tangan: {'ya' if marks else 'tidak'} | "
-                          f"crop: {crop_note} | {tts_note}", (10, 24),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        line = (f"tangan: {'ya' if marks else 'tidak'} | "
+               f"crop: {crop_note} | {tts_note}")
+        (tw, _), _ = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        # Panel tepi-atas: latar putih penuh lebar, teks hitam. Lebar = panjang
+        # teks s/d batas lebar frame, jadi tak pernah terpotong.
+        px, py = 10, 24
+        panel_w = min(show.shape[1] - 2 * px, tw + 20)
+        cv2.rectangle(show, (px - 6, py - 22), (px + panel_w, py + 10),
+                      (255, 255, 255), -1)
+        cv2.putText(show, line, (px, py), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                    (0, 0, 0), 2, cv2.LINE_AA)
         # overlay huruf: posisi & gaya sama persis dengan yang dikirim ke vcam
         draw_text(show, text, self.font_size)
         cv2.imshow("IsyaratKu debug (tekan q untuk tutup jendela)", show)
@@ -294,7 +307,10 @@ class Worker:
                     continue
 
                 with torch.no_grad():
-                    probs = torch.softmax(model(recognizer.preprocess(cropped)), 1)[0]
+                    # Crop DIBALIK sebelum preprocess (keputusan user: tampilan
+                    # tanpa mirror, pemrosesan memakai citra mirror).
+                    probs = torch.softmax(
+                        model(recognizer.preprocess(cv2.flip(cropped, 1))), 1)[0]
                 self.inferred_frames += 1
                 letter = labels[int(probs.argmax())]
                 self.last_letter = letter

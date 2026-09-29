@@ -92,8 +92,10 @@ def _tts_worker() -> None:
         text = _queue.get()
         try:
             _emit(text)
-        except TtsUnavailable as exc:
-            print(f"TTS dilewati: {exc}")
+        except Exception as exc:
+            # Semua kegagalan dilaporkan: TTS yang mati tanpa pesan tak
+            # bisa dibedakan dari "tidak ada yang diucapkan".
+            print(f"TTS dilewati: {type(exc).__name__}: {exc}")
         _queue.task_done()
 
 

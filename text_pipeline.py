@@ -75,8 +75,8 @@ class TextPipeline:
             if self._speak:
                 try:
                     self._speak(word)
-                except Exception:
-                    pass  # TTS gagal tidak boleh mematikan loop video
+                except Exception as exc:  # TTS rusak JANGAN membisukan diam-diam
+                    print(f"[tts] {type(exc).__name__}: {exc}")
             # timer absen TETAP jalan: kalimat selesai pada idle dari absen sama
 
         if absent >= self._idle and self.sentence:
