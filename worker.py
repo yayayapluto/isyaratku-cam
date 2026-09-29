@@ -1,6 +1,6 @@
 """Worker: webcam -> pengenalan -> teks -> kamera virtual + TTS.
 
-Satu thread kerja (dipanggil dari QThread di main.py, atau langsung lewat
+Satu thread kerja (dipanggil dari QThread di app.py, atau langsung lewat
 main() untuk smoke test). Setiap frame: flip -> model -> smoothing 4-dari-5 ->
 pipeline teks -> overlay -> pyvirtualcam.
 """
@@ -27,6 +27,7 @@ BACKEND_ORDER = ("unitycapture", "obs")  # Unity Capture utama, OBS cadangan
 def open_vcam(width: int, height: int, preferred: Optional[str] = None) -> tuple:
     """Buka kamera virtual di resolusi frame webcam. (camera, backend_name)."""
     order = (preferred,) if preferred else BACKEND_ORDER
+    errors: list[str] = []
     for name in order:
         try:
             cam = pyvirtualcam.Camera(
@@ -34,10 +35,14 @@ def open_vcam(width: int, height: int, preferred: Optional[str] = None) -> tuple
             )
             return cam, name
         except Exception as exc:  # backend tidak terpasang / device lemah
-            pass
+            # Disimpan untuk diagnosa: pesan final tetap satu baris yang
+            # bisa dibaca user, tapi log tetap tahu Unity vs OBS mana gagal.
+            errors.append(f"{name}: {exc}")
+    detail = " | ".join(errors) if errors else "tidak ada backend yang dicoba"
     raise RuntimeError(
         "Kamera virtual tidak ditemukan. Jalankan Install.bat Unity Capture "
-        "sebagai Administrator, lalu restart aplikasi. Cadangan: pasang OBS."
+        "sebagai Administrator, lalu restart aplikasi. Cadangan: pasang OBS. "
+        f"[{detail}]"
     )
 
 
@@ -253,7 +258,8 @@ class Worker:
                         raise RuntimeError("webcam berhenti memberi frame")
                     continue
                 missed = 0
-                frame = cv2.flip(frame, 1)
+                # Frame dikirim apa adanya (tanpa flip): output kamera virtual
+                # harus sama dengan gambar asli webcam.
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 marks = detector.detect(rgb)
                 if marks is None:

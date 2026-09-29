@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QSizePolicy,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -49,7 +50,8 @@ STATE_RUNNING = "running"
 STATE_ERROR = "error"
 
 PLACEHOLDER = "Tunjukkan isyarat huruf ke kamera"
-FONT_SIZES = {"S": 14, "M": 22, "L": 32}
+FONT_SIZES = {"S": 14, "M": 22, "L": 32}          # ukuran font OVERLAY
+DISPLAY_SIZES = {"S": 22, "M": 28, "L": 32}       # ukuran font kartu teks
 DEVICE_NAMES = {"unitycapture": "Unity Video Capture", "obs": "OBS Virtual Camera"}
 
 MIC_FIX = (
@@ -99,9 +101,12 @@ class HealthChip(QLabel):
         self.setText(text)
         self.setStyleSheet(
             f"HealthChip {{ background: {color}; border-radius: 6px;"
-            f" padding: 4px 10px; color: white; font-size: 13px; }}"
+            f" padding: 4px 10px; color: white; font-size: 13pt; }}"
         )
-        self.setToolTip(self._fix_text if level == "bad" else "")
+        # Klik (bukan hover) memperlihatkan langkah perbaikan untuk
+        # kuning/merah — chip hijau tidak butuh langkah apa pun.
+        self._fix_on_click = level in ("warn", "bad")
+        self.setToolTip(self._fix_text if self._fix_on_click else "")
 
     def set_ok(self, detail: str = "") -> None:
         self.set_state("ok", detail)
@@ -114,6 +119,11 @@ class HealthChip(QLabel):
 
     def set_unknown(self) -> None:
         self.set_state("unchecked")
+
+    def mousePressEvent(self, event) -> None:
+        if getattr(self, "_fix_on_click", False):
+            QToolTip.showText(event.globalPosition().toPoint(), self._fix_text)
+        super().mousePressEvent(event)
 
 class WorkerThread(QThread):
     """Deteksi/klasifikasi/TTS/overlay di thread terpisah. Semua output ke
@@ -186,6 +196,7 @@ class MainWindow(QWidget):
 
         head = QHBoxLayout()
         self.title_label = TitleLabel("IsyaratKu Cam", self)
+        self.title_label.setStyleSheet("color: white;")
         self.pin_button = ToolButton(FluentIcon.PIN, self)
         self.pin_button.setCheckable(True)
         self.pin_button.setToolTip("Selalu di atas")
@@ -194,6 +205,27 @@ class MainWindow(QWidget):
         head.addStretch(1)
         head.addWidget(self.pin_button)
         root.addLayout(head)
+
+        size_row = QHBoxLayout()
+        size_label = BodyLabel("Ukuran", self)
+        size_label.setStyleSheet("color: white;")
+        self.size_seg = SegmentedWidget(self)
+        for key in ("S", "M", "L"):
+            self.size_seg.insertItem(
+                list(FONT_SIZES).index(key), key, key
+            )
+        # PivotItem dasar memaksa color: black di semua state; tambahkan
+        # override putih supaya S/M/L terang seperti widget Fluent lain.
+        for item in self.size_seg.items.values():
+            item.setStyleSheet(
+                item.styleSheet() + "\nSegmentedItem { color: white; }"
+            )
+        self.size_seg.setCurrentItem("M")
+        self.size_seg.currentItemChanged.connect(self.on_size_changed)
+        size_row.addWidget(size_label)
+        size_row.addStretch(1)
+        size_row.addWidget(self.size_seg)
+        root.addLayout(size_row)
 
         badge_row = QHBoxLayout()
         self.spinner = IndeterminateProgressRing(self)
@@ -214,6 +246,7 @@ class MainWindow(QWidget):
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.text_label.setMinimumHeight(150)
         self.text_label.setStyleSheet("color: #909097; font-weight: 600;")
+        self.text_label.setFont(QFont("", self._display_size()))
         card_box.addWidget(self.text_label)
         self.candidate_label = CaptionLabel(
             "Tunjukkan isyarat huruf ke kamera", self.text_card
@@ -234,20 +267,6 @@ class MainWindow(QWidget):
             row.setWordWrap(True)
             recent_box.addWidget(row)
         root.addWidget(recent)
-
-        size_row = QHBoxLayout()
-        size_label = BodyLabel("Ukuran", self)
-        self.size_seg = SegmentedWidget(self)
-        for key in ("S", "M", "L"):
-            self.size_seg.insertItem(
-                list(FONT_SIZES).index(key), key, key
-            )
-        self.size_seg.setCurrentItem("M")
-        self.size_seg.currentItemChanged.connect(self.on_size_changed)
-        size_row.addWidget(size_label)
-        size_row.addStretch(1)
-        size_row.addWidget(self.size_seg)
-        root.addLayout(size_row)
 
         chips = QHBoxLayout()
         chips.setSpacing(8)
@@ -308,6 +327,9 @@ class MainWindow(QWidget):
         else:
             self.start_button.setText("Menyiapkan…")
             self.error_card.hide()
+        if state == STATE_STOPPED:
+            self.text_label.setText(PLACEHOLDER)
+            self.text_label.setStyleSheet("color: #909097; font-weight: 600;")
         if state != STATE_PREPARING and state != STATE_RUNNING:
             self.candidate_label.setText("Tunjukkan isyarat huruf ke kamera")
 
@@ -324,6 +346,7 @@ class MainWindow(QWidget):
         self.text_label.setText(PLACEHOLDER)
         self.text_label.setStyleSheet("color: #909097; font-weight: 600;")
         self._apply_state(STATE_PREPARING)
+        self.text_label.setFont(QFont("", self._display_size()))
         self.thread = WorkerThread(
             font_size=self._font_size(),
             enable_tts=True,
@@ -345,10 +368,17 @@ class MainWindow(QWidget):
         if self.state != STATE_STOPPED and self.state != STATE_ERROR:
             self._apply_state(STATE_STOPPED)
 
+    def _key(self) -> str:
+        return self.size_seg.currentRouteKey() or "M"
+
     def _font_size(self) -> int:
-        return FONT_SIZES[self.size_seg.currentRouteKey() or "M"]
+        return FONT_SIZES[self._key()]
+
+    def _display_size(self) -> int:
+        return DISPLAY_SIZES[self._key()]
 
     def on_size_changed(self, _route: object) -> None:
+        self.text_label.setFont(QFont("", self._display_size()))
         if self.thread is not None:
             self.thread.set_font_size(self._font_size())
 
@@ -412,8 +442,9 @@ class MainWindow(QWidget):
                 for pth in (recognizer.MODEL_PATH, hand_detect.HAND_MODEL)
             ),
         }
+        # virtual_cam=None -> on_health hanya set chip kamera, tidak
+        # mengubah state. State tetap BERHENTI, teks terakhir tetap terlihat.
         self.on_health(health)
-        self._apply_state(STATE_STOPPED)
 
     def on_error(self, message: str) -> None:
         self._apply_state(STATE_ERROR)
@@ -448,7 +479,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    app = QApplication(sys.argv[:1] + (["--debug"] if args.debug else []))
+    app = QApplication(sys.argv)  # Qt mengabaikan --debug argparse
     window = MainWindow(debug=args.debug)
     window.show()
     sys.exit(app.exec())

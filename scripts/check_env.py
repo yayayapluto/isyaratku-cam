@@ -11,6 +11,7 @@ import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)  # import worker (BACKEND_ORDER) dari akar repo
 
 ok = True
 
@@ -72,15 +73,16 @@ def espeak() -> tuple[bool, str]:
 def vcam_backend() -> tuple[bool, str]:
     try:
         import pyvirtualcam
-        for backend in ("obs", "unitycapture"):
-            try:
-                with pyvirtualcam.Camera(width=160, height=120, fps=10, backend=backend):
-                    return True, f"{backend} aktif"
-            except Exception:
-                continue
-        return False, 'hidupkan "Start Virtual Camera" di OBS'
     except ImportError:
         return False, "pyvirtualcam belum terpasang"
+    from worker import BACKEND_ORDER
+    for backend in BACKEND_ORDER:  # urutan sama dengan worker
+        try:
+            with pyvirtualcam.Camera(width=160, height=120, fps=10, backend=backend):
+                return True, f"{backend} aktif (utama: {BACKEND_ORDER[0]})"
+        except Exception:
+            continue
+    return False, f"coba {BACKEND_ORDER[0]} lalu {BACKEND_ORDER[1]}"
 
 
 def main() -> int:
