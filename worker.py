@@ -130,7 +130,7 @@ class Worker:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 marks = detector.detect(rgb)
                 if marks is None:
-                    self._pipeline.clear_hand()   # tangan hilang -> huruf berganti
+                    self._pipeline.clear_hand()   # tangan hilang -> timer absen
                     smoother.reset()
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
@@ -140,6 +140,13 @@ class Worker:
 
                 self.hand_frames += 1
                 cropped = crop_hand(frame, marks)
+                if cropped is None:   # tangan terlalu jauh/kecil: skip prediksi
+                    draw_text(frame, self._pipeline.text, self.font_size)
+                    self.sent_frames += 1
+                    cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                    cam.sleep_until_next_frame()
+                    continue
+
                 with torch.no_grad():
                     probs = torch.softmax(model(recognizer.preprocess(cropped)), 1)[0]
                 self.inferred_frames += 1

@@ -1,7 +1,7 @@
 """Deteksi tangan + crop bbox (MediaPipe Tasks API).
 
 MediaPipe 1.0.1 tidak lagi punya `solutions.Hands`; pakai Tasks
-HandLandmarker. Crop = bbox landmark + padding 20px (TECH_SPEC §4.2).
+HandLandmarker. Crop = bbox landmark + padding (TECH_SPEC §4.2).
 """
 
 from __future__ import annotations
@@ -14,14 +14,19 @@ import numpy as np
 ROOT = os.path.dirname(os.path.abspath(__file__))
 HAND_MODEL = os.path.join(ROOT, "models", "hand", "hand_landmarker.task")
 PADDING = 20  # px, sesuai TECH_SPEC §4.2
+MIN_CROP = 32  # px; crop lebih kecil dari ini tidak dipakai untuk prediksi
 
 _landmarker = None
 
 
 class HandDetector:
-    """Deteksi tangan; kumpulkan landmark x/y (0..1) per tangan."""
+    """Deteksi tangan; kumpulkan landmark x/y (0..1) per tangan.
 
-    def __init__(self) -> None:
+    num_hands=2: BISINDO memakai bentuk kedua tangan dalam sebagian huruf,
+    jadi bbox harus mencakup keduanya (lihat docs/MODEL_SELECTION.md).
+    """
+
+    def __init__(self, num_hands: int = 2) -> None:
         global _landmarker
         if _landmarker is None:
             if not os.path.exists(HAND_MODEL):
@@ -36,26 +41,31 @@ class HandDetector:
                 base_options=base_options.BaseOptions(
                     model_asset_path=HAND_MODEL
                 ),
-                num_hands=1,
+                num_hands=num_hands,
             )
             _landmarker = vision.HandLandmarker.create_from_options(options)
         self._landmarker = _landmarker
 
     def detect(self, frame_rgb: np.ndarray) -> Optional[list[tuple[float, float]]]:
-        """Kembalikan landmark tangan pertama sebagai [(x, y)] 0..1, atau None."""
+        """Landmark SEMUA tangan yang terlihat sebagai [(x, y)] 0..1, atau None."""
         import mediapipe as mp
 
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
         result = self._landmarker.detect(image)
         if not result.hand_landmarks:
             return None
-        return [(lm.x, lm.y) for lm in result.hand_landmarks[0]]
+        return [(lm.x, lm.y) for hand in result.hand_landmarks for lm in hand]
 
 
 def crop_hand(
     frame_bgr: np.ndarray, landmarks: list[tuple[float, float]]
-) -> np.ndarray:
-    """Potong bbox tangan dengan padding (TECH_SPEC §4.2)."""
+) -> Optional[np.ndarray]:
+    """Crop bbox tangan + padding, lalu letterbox ke persegi.
+
+    Letterbox: rasio aspek asli dipertahankan (padding tepi), supaya tangan
+    tinggi tidak gepeng saat di-resize 224x224 di recognizer.preprocess.
+    Kembalikan None kalau hasil crop jauh lebih kecil dari MIN_CROP.
+    """
     h, w = frame_bgr.shape[:2]
     xs = [x * w for x, _ in landmarks]
     ys = [y * h for _, y in landmarks]
@@ -64,8 +74,17 @@ def crop_hand(
     x1 = min(w, int(max(xs)) + PADDING)
     y1 = min(h, int(max(ys)) + PADDING)
     if x1 <= x0 or y1 <= y0:
-        return frame_bgr
-    return frame_bgr[y0:y1, x0:x1]
+        return None
+    crop = frame_bgr[y0:y1, x0:x1]
+    ch, cw = crop.shape[:2]
+    if max(ch, cw) < MIN_CROP:
+        return None  # terlalu jauh dari kamera: prediksi hasil upscale tak berguna
+
+    side = max(ch, cw)
+    out = np.zeros((side, side, 3), dtype=frame_bgr.dtype)
+    out[(side - ch) // 2:(side - ch) // 2 + ch,
+        (side - cw) // 2:(side - cw) // 2 + cw] = crop
+    return out
 
 
 if __name__ == "__main__":
@@ -86,7 +105,9 @@ if __name__ == "__main__":
         total += 1
         if marks:
             frames_with_hand += 1
-            cv2.imshow("crop", crop_hand(frame, marks))
+            crop = crop_hand(frame, marks)
+            if crop is not None:
+                cv2.imshow("crop (letterbox)", crop)
         cv2.imshow("frame", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break

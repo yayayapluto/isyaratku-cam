@@ -10,10 +10,18 @@ tetapi tidak dapat berbicara. Subtema: **"Akses untuk Semua"** (SDG 3, 10, 16).
 
 ## Status
 
-M1–M6 selesai: webcam → deteksi tangan MediaPipe → crop bbox → model A–Z →
-smoothing 4-dari-5 → pipeline huruf→kata→kalimat → overlay → OBS Virtual
-Camera + suara Piper ke "CABLE Output". GUI (`python main.py`) sudah teruji.
-Milestone & urutan build: [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md).
+M1–M6 jalan, terverifikasi E2E (`scripts/verify_m36.py`):
+
+```
+webcam → MediaPipe Hands (num_hands=2) → crop bbox +20px → letterbox persegi
+→ EfficientNet-B3 A–Z → smoothing 4-dari-5 → huruf→kata→kalimat
+→ overlay → OBS Virtual Camera + suara Piper → "CABLE Output"
+```
+
+Kalimat diucapkan **setelah tangan hilang 3 detik** (TECH_SPEC §4.5) — menahan
+satu isyarat tidak membuat kata terpotong di tengah.
+Hasil pengukuran akurasi A–Z: **belum ada** (`docs/results_m2.json` belum dibuat),
+lihat [Pengukuran akurasi (M2)](#pengukuran-akurasi-m2).
 
 ## Setup
 
@@ -22,43 +30,71 @@ python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Prasyarat di luar pip:
-# 1. OBS Studio — untuk "OBS Virtual Camera" (kamera virtual output utama).
+# 1. OBS Studio — "OBS Virtual Camera" (kamera virtual output utama).
 #    Start Virtual Camera agar device aktif di Zoom/Meet.
 # 2. VB-Cable — https://vb-audio.com/Cable/  → mikrofon virtual "CABLE Output".
-# 3. espeak-ng — wajib untuk fonemisasi voice id_ID di Piper
-#    https://github.com/espeak-ng/espeak-ng/releases
-#    (OPSIONAL, tertunda: Unity Capture https://github.com/schellingb/UnityCapture)
+# 3. espeak-ng — fonemisasi voice id_ID di Piper; sudah disiapkan lokal di
+#    tools/espeak-ng/ (hasil extract MSI, tidak masuk PATH).
+#    (Opsional, ditunda: Unity Capture https://github.com/schellingb/UnityCapture)
 
-bash scripts/download_models.sh   # bobot model A-Z + voice Piper (~63MB)
-python scripts/check_env.py       # cek device virtual + file model + espeak-ng
-python main.py
+bash scripts/download_models.sh   # bobot A-Z (~44MB) + voice Piper (~63MB) + hand landmarker (~7,5MB)
+python scripts/check_env.py       # 6 cek: VB-Cable, model A-Z, model tangan, voice, espeak-ng, kamera virtual
+python main.py                    # Start / Stop + slider ukuran font overlay
 ```
+
+## Pakai aplikasi
+
+1. `python main.py` → **MULAI**.
+2. Isyaratkan huruf satu per satu; jeda/rupanya huruf baru cukup untuk menambah huruf.
+3. Turunkan tangan dan tunggu 3 detik → kata diucapkan (Zoom/Meet memakainya
+   sebagai mikrofon) dan overlay bersih untuk kata berikutnya.
+4. Slider mengatur ukuran font overlay (10–32, langsung berlaku saat jalan).
+
+Di Zoom/Meet: kamera = **"OBS Virtual Camera"**, mikrofon = **"CABLE Output"**.
+Tes lewat self-view Zoom/Meet.
 
 ## Prasyarat lingkungan
 
-| Komponen | Fungsi | Cara pasang / status |
+| Komponen | Fungsi | Status |
 |---|---|---|
-| OBS Studio | kamera virtual utama "OBS Virtual Camera" | installer resmi; "Start Virtual Camera" — **TERPASANG** |
-| VB-Cable | mikrofon virtual "CABLE Output" | installer resmi — **TERPASANG** |
-| espeak-ng | fonemisasi voice Indonesia Piper | terpasang lokal: extract MSI ke `tools/espeak-ng/` — **TERPASANG** |
-| Unity Capture | kamera virtual alternatif bila OBS VC bermasalah | `Install.bat` sebagai Administrator — **DITUNDA, OPSIONAL** |
-| Model A-Z | bobot EfficientNet-B3 dari `Syizuril/bisindo-sign-language` | `scripts/download_models.sh` |
-| Voice Piper | `id_ID-news_tts-medium` (ONNX) | `scripts/download_models.sh` |
+| OBS Studio | kamera virtual utama "OBS Virtual Camera" | **TERPASANG** |
+| VB-Cable | mikrofon virtual "CABLE Output" | **TERPASANG** |
+| espeak-ng | fonemisasi voice Indonesia Piper | **TERPASANG** (lokal `tools/espeak-ng/`, hasil extract MSI) |
+| Unity Capture | kamera virtual alternatif bila OBS VC bermasalah | **DITUNDA, OPSIONAL** |
+| Model A-Z | EfficientNet-B3, `Syizuril/bisindo-sign-language` | diunduh via script |
+| Hand landmarker | deteksi tangan MediaPipe Tasks | diunduh via script |
+| Voice Piper | `id_ID-news_tts-medium` (ONNX) | diunduh via script |
 
-Di Zoom/Meet: kamera = "OBS Virtual Camera", mikrofon = "CABLE Output".
-Tes lewat self-view Zoom/Meet. Playback TTS ke "CABLE Input" — pilih host API
-WASAPI (48 kHz, 2 kanal); MME/DirectSound mendaftar entri ganda.
+Catatan device: playback TTS mencari perangkat dengan "CABLE" dan
+`max_output_channels > 0`, memilih WASAPI stereo 48 kHz. MME/DirectSound
+mendaftar entri ganda (16 kanal) untuk perangkat yang sama.
+
+## Pengukuran akurasi (M2)
+
+```bash
+python scripts/test_letters.py              # kondisi aplikasi: crop + letterbox
+python scripts/test_letters.py --full-frame  # baseline: frame penuh
+```
+
+Jalankan **keduanya di kamera & cahaya yang sama** supaya bisa dibandingkan:
+tanpa baseline full-frame, akurasi buruk tidak bisa diatribusi ke crop.
+Tulis hasilnya ke `docs/MODEL_SELECTION.md` sebelum menyebut angka akurasi.
+
+Peringatan yang masih terbuka (jangan lulus sebelum diuji):
+
+- Ukuran input 224×224 dan normalisasi ImageNet adalah **[ASUMSI]** — model card
+  tidak mendokumentasikannya.
+- Letterbox persegi di crop adalah **[ASUMSI]** tentang cara data latih disiapkan.
+- Variasi regional isyarat, pencahayaan, dan jarak tangan belum diukur.
 
 ## Peringatan lisensi [PERLU DICEK]
 
-- Bobot model A-Z (`Syizuril/bisindo-sign-language`) repo **publik tanpa token**,
+- Bobot model A–Z (`Syizuril/bisindo-sign-language`) repo **publik tanpa token**,
   tetapi **lisensi tidak tertulis**. Hanya diunduh saat setup, tidak di-bundle,
   tidak didistribusikan ulang sebelum lisensi terkonfirmasi.
 - Voice Piper `id-ID-news_tts-medium` (dari `rhasspy/piper-voices`) — lisensi
   MODEL_CARD **belum diverifikasi**. Sama: unduh saat setup, jangan di-bundle.
-- Asumsi model (urutan label A–Z, ukuran input, normalisasi) **belum
-  terdokumentasi**; divalidasi saat seleksi model, lihat
-  [`docs/TECH_SPEC.md` §6](docs/TECH_SPEC.md).
+- MediaPipe hand landmarker: Apache-2.0 (aman dipakai).
 
 ## Dokumentasi
 
@@ -71,8 +107,8 @@ WASAPI (48 kHz, 2 kanal); MME/DirectSound mendaftar entri ganda.
 
 Format commit: `[type]: description` — type: `feat`, `fix`, `docs`, `refactor`,
 `chore`, `test`, `perf`, `build`, `ci`. Micro commit dianjurkan (lihat
-[`AGENTS.md`](AGENTS.md#git-commit)). Folder `models/` dan `.venv/` tidak
-di-commit.
+[`AGENTS.md`](AGENTS.md#git-commit)). Folder `models/`, `tools/`, dan `.venv/`
+tidak di-commit.
 
 ## Privasi
 
