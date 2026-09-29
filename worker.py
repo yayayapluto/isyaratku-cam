@@ -190,6 +190,7 @@ class Worker:
         self.font_size = font_size
         self.debug = debug
         self.running = False
+        self._stop_requested = False
         self._model: Optional[tuple] = None
         self._pipeline: Optional[text_pipeline.TextPipeline] = None
         self.tts_error: Optional[str] = None
@@ -219,6 +220,7 @@ class Worker:
 
     def stop(self) -> None:
         self.running = False
+        self._stop_requested = True
 
     def _record_stage(self, name: str, start: float) -> None:
         """Catat latensi satu tahap: masuk log debug + rata-rata panel."""
@@ -455,6 +457,14 @@ class Worker:
         except RuntimeError as exc:
             cap.release()
             raise RuntimeError(f"kamera virtual gagal: {exc}") from exc
+        # stop() bisa datang sebelum loop mulai (prewarm voice ~10 s: deadline
+        # --seconds bisa jatuh di antara). Kalau sudah diminta berhenti, tutup
+        # device dan keluar — jangan masuk loop lagi.
+        if self._stop_requested:
+            cap.release()
+            cam.close()
+            self.running = False
+            return
         self.running = True
         self.backend = backend
         self._health(backend=backend)
@@ -591,7 +601,18 @@ class Worker:
 def main() -> None:
     debug = "--debug" in sys.argv
     logs.setup_logging(debug=debug)
-    worker = Worker(on_status=lambda t: print(t) if t else None, debug=debug)
+    worker = Worker(on_status=lambda t: _log.info("status: %s", t), debug=debug)
+    # --seconds N untuk uji otomatis (tanpa itu worker jalan sampai STOP).
+    if "--seconds" in sys.argv:
+        import threading
+
+        n = float(sys.argv[sys.argv.index("--seconds") + 1])
+
+        def _stop_after() -> None:
+            time.sleep(n)
+            worker.stop()
+
+        threading.Thread(target=_stop_after, daemon=True).start()
     try:
         worker.run()
     except KeyboardInterrupt:
@@ -600,5 +621,33 @@ def main() -> None:
         _log.error("ERROR: %s", exc)
 
 
+def _self_check() -> None:
+    """Stop sebelum loop mulai harus keluar cepat, tanpa device sungguhan."""
+    import types as _types
+
+    cap = _types.SimpleNamespace(release=lambda: None)
+    saved_webcam, saved_vcam = open_webcam, open_vcam
+    try:
+        globals()["open_webcam"] = lambda: (cap, 640, 480)
+        globals()["open_vcam"] = lambda w, h: (
+            _types.SimpleNamespace(close=lambda: None), "fake",
+        )
+        w = Worker(debug=False, enable_tts=False)
+        w.stop()
+        t0 = time.perf_counter()
+        w.run()
+        dt = time.perf_counter() - t0
+        assert dt < 1.0, f"stop sebelum loop harus cepat, dapat {dt:.2f}s"
+        assert w.sent_frames == 0 and w.running is False
+        print(f"stop sebelum loop: keluar {dt * 1000:.0f} ms, 0 frame")
+    finally:
+        globals()["open_webcam"] = saved_webcam
+        globals()["open_vcam"] = saved_vcam
+
+
+
 if __name__ == "__main__":
+    if "--self-check" in sys.argv:
+        _self_check()
+        sys.exit(0)
     main()
