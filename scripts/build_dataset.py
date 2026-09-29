@@ -52,32 +52,52 @@ def _landmarks_from_bbox(
             (x1 / w, y1 / h), (x0 / w, y1 / h)]
 
 
-def _voc_candidate_dirs(root: str) -> list[str]:
-    """Folder VOC yang mungkin berisi pasangan *.jpg + *.xml per split.
+def _voc_base_dirs(root: str) -> list[str]:
+    """Layout VOC yang mungkin (urut prioritas: yang pertama menang).
 
-    Layout yang diterima (urut prioritas, direktorinya di-dedupe):
-      1. <root>/collectedimages/<split>   (layout VOC asli rhio)
-      2. <root>/<split>                   (layout repo saat ini)
+      1. <root>/collectedimages/<split>   (layout VOC asli)
+      2. <root>/<split>                   (layout hasil pindah di repo)
+
+    Hanya SATU base per root yang dipakai: bila base pertama ada dan
+    berisi anotasi .xml, base kedua diabaikan — supaya sumber yang sama
+    tidak ter-stage dua kali sebagai dataset terpisah.
     """
     dirs: list[str] = []
     for base in (os.path.join(root, "collectedimages"), root):
+        found = False
         for split in _VOC_SPLITS:
             folder = os.path.join(base, split)
             if not os.path.isdir(folder):
                 continue
+            if not any(n.endswith(".xml") for n in os.listdir(folder)):
+                continue
+            found = True
             real = os.path.realpath(folder)
             if real not in dirs:
                 dirs.append(real)
+        if found:
+            break
     return dirs
+
+
+def _voc_candidate_dirs(root: str) -> list[str]:
+    """Folder VOC layak dibaca (alias pendek `_voc_base_dirs`)."""
+    return _voc_base_dirs(root)
 
 
 def _read_voc_annotations(
     items: list[tuple[str, str, np.ndarray]], folder: str
 ) -> int:
     """Baca satu folder VOC -> items; balikin jumlah pasangan jpg+xml valid."""
+    copy_skipped = False
     staged = 0
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".xml"):
+            continue
+        if " - Copy" in name:  # salinan manual Finder/Explorer: byte-identik
+            if not copy_skipped:
+                _LOG.info("salinan ' - Copy' dilewati: %s", folder)
+                copy_skipped = True
             continue
         jpg = os.path.join(folder, name[:-4] + ".jpg")
         if not os.path.exists(jpg):
