@@ -36,7 +36,10 @@ def open_vcam(preferred: Optional[str] = None) -> tuple:
             return cam, name
         except Exception as exc:  # backend tidak terpasang / device lemah
             errors.append(f"{name}: {exc}")
-    raise RuntimeError(" | ".join(errors))
+    raise RuntimeError(
+        " | ".join(errors)
+        + " (nyalakan OBS Virtual Camera: Controls > Start Virtual Camera)"
+    )
 
 
 def open_webcam() -> cv2.VideoCapture:
@@ -66,10 +69,12 @@ class Worker:
         on_status: Optional[Callable[[str], None]] = None,
         enable_tts: bool = True,
         font_size: int = 22,
+        debug: bool = False,
     ) -> None:
         self.on_status = on_status
         self.enable_tts = enable_tts
         self.font_size = font_size
+        self.debug = debug
         self.running = False
         self._model: Optional[tuple] = None
         self._pipeline: Optional[text_pipeline.TextPipeline] = None
@@ -82,6 +87,28 @@ class Worker:
 
     def stop(self) -> None:
         self.running = False
+
+    def _preview(self, frame, marks, text: str, crop=None) -> None:
+        """Mode debug saja: jendela debug dengan bbox + keterangan deteksi."""
+        if not self.debug:
+            return
+        show = frame.copy()
+        for x, y in marks if marks else []:
+            cv2.circle(show, (int(x * show.shape[1]), int(y * show.shape[0])), 3,
+                       (0, 255, 255), -1)
+        if marks:
+            xs = [x * show.shape[1] for x, _ in marks]
+            ys = [y * show.shape[0] for _, y in marks]
+            cv2.rectangle(show, (int(min(xs)), int(min(ys))),
+                          (int(max(xs)), int(max(ys))), (255, 0, 255), 2)
+        crop_note = "-" if crop is None else f"{crop.shape[1]}x{crop.shape[0]}px"
+        cv2.putText(show, f"tangan: {'ya' if marks else 'tidak'} | "
+                          f"crop: {crop_note} | huruf: {text}", (10, 24),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        draw_text(show, text, self.font_size)
+        cv2.imshow("IsyaratKu debug (tekan q untuk tutup jendela)", show)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            self.running = False
 
     def _status(self, text: str) -> None:
         if self.on_status:
@@ -126,12 +153,12 @@ class Worker:
                 missed = 0
                 frame = cv2.flip(frame, 1)
                 frame = cv2.resize(frame, (WIDTH, HEIGHT))
-
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 marks = detector.detect(rgb)
                 if marks is None:
                     self._pipeline.clear_hand()   # tangan hilang -> timer absen
                     smoother.reset()
+                    self._preview(frame, None, self._pipeline.text)
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
                     cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -140,6 +167,7 @@ class Worker:
 
                 self.hand_frames += 1
                 cropped = crop_hand(frame, marks)
+                self._preview(frame, marks, self._pipeline.text, cropped)
                 if cropped is None:   # tangan terlalu jauh/kecil: skip prediksi
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
@@ -167,6 +195,8 @@ class Worker:
         finally:
             cap.release()
             cam.close()
+            if self.debug:
+                cv2.destroyAllWindows()
             self.running = False
 
 

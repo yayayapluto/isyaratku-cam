@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QApplication, QLabel, QVBoxLayout, QWidget, QSlider,
 )
 from PySide6.QtCore import Qt
-from qfluentwidgets import PushButton, TitleLabel, Slider
+from qfluentwidgets import CheckBox, PushButton, TitleLabel, Slider
 
 import worker as worker_mod
 
@@ -21,10 +21,18 @@ class WorkerThread(QThread):
     status = Signal(str)
     error = Signal(str)
 
-    def __init__(self, enable_tts: bool = True, font_size: int = 22) -> None:
+    def __init__(
+        self,
+        enable_tts: bool = True,
+        font_size: int = 22,
+        debug: bool = False,
+    ) -> None:
         super().__init__()
         self._worker = worker_mod.Worker(
-            on_status=self.status.emit, enable_tts=enable_tts, font_size=font_size
+            on_status=self.status.emit,
+            enable_tts=enable_tts,
+            font_size=font_size,
+            debug=debug,
         )
 
     def run(self) -> None:
@@ -69,6 +77,10 @@ class MainWindow(QWidget):
         self.slider.valueChanged.connect(self.on_font_size)
         layout.addWidget(self.slider)
 
+        self.debug_box = CheckBox("Mode debug: pratinjau kamera + bbox tangan")
+        self.debug_box.setChecked(False)
+        layout.addWidget(self.debug_box)
+
         self.setLayout(layout)
 
     def on_toggle(self) -> None:
@@ -79,12 +91,16 @@ class MainWindow(QWidget):
             self.toggle.setText("MULAI")
             self.status.setText("Berhenti")
             return
-        self.thread = WorkerThread(font_size=self.slider.value())
+        debug = self.debug_box.isChecked()
+        self.thread = WorkerThread(
+            font_size=self.slider.value(),
+            debug=debug,
+        )
         self.thread.status.connect(self.on_status)
         self.thread.error.connect(self.on_error)
         self.thread.start()
         self.toggle.setText("STOP")
-        self.status.setText("Berjalan")
+        self.status.setText("Berjalan" + (" (debug)" if debug else ""))
 
     def on_status(self, text: str) -> None:
         if text:
