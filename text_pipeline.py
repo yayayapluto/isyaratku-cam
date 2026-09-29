@@ -28,6 +28,7 @@ class TextPipeline:
         self.prev_letter: Optional[str] = None
         self._last_new: Optional[float] = None
         self._hand_present = False
+        self._hand_absent_since: Optional[float] = None
 
     def _now(self) -> float:
         return time.monotonic()
@@ -40,23 +41,32 @@ class TextPipeline:
         self.prev_letter = letter
         self._last_new = self._now()
         self._hand_present = True
+        self._hand_absent_since = None
 
     def clear_hand(self) -> None:
-        """Panggil saat tangan hilang dari frame."""
+        """Panggil saat tangan hilang dari frame (mulai timer absen)."""
         self.prev_letter = None
+        self._hand_present = False
+        if self._hand_absent_since is None and self.word:
+            self._hand_absent_since = self._now()
 
     def tick(self) -> Optional[str]:
-        """Panggil tiap frame. Kembalikan kalimat bila jeda 3 detik tercapai."""
-        if self._last_new is None:
+        """Flush hanya kalau tangan absen >= idle (TECH_SPEC §4.5 / FR-07).
+
+        Tangan tetap di frame -> jangan ucapkan kata yang belum selesai.
+        """
+        if self._hand_present or self._hand_absent_since is None:
             return None
-        if self._now() - self._last_new < self._idle:
+        if self._now() - self._hand_absent_since < self._idle:
             return None
         if not self.word:
+            self._hand_absent_since = None
             return None
         spoken_sentence = self.word.strip()
         self.word = ""
         self.prev_letter = None
         self._last_new = None
+        self._hand_absent_since = None
         if self._speak:
             try:
                 self._speak(spoken_sentence)
@@ -79,12 +89,21 @@ if __name__ == "__main__":
     pipe.add_letter("I")
     assert pipe.text == "HI", pipe.text
 
-    time.sleep(0.25)
-    assert pipe.tick() == "HI", "kalimat harus siap setelah jeda"
-    assert spoken == ["HI"]
-    assert pipe.text == "", pipe.text
+    # tangan MASIH di frame -> jangan flush walau sudah 3 detik
+    time.sleep(0.3)
+    assert pipe.tick() is None, "tangan ada: kata belum selesai jangan diucapkan"
+    assert spoken == [], spoken
 
+    # tangan hilang -> timer absen jalan, baru flush
     pipe.clear_hand()
+    time.sleep(0.25)
+    assert pipe.tick() == "HI", "kalimat harus siap setelah tangan hilang + jeda"
+    assert spoken == ["HI"]
+    assert pipe.text == ""
+
+    # pipe kosong -> tick aman
+    assert pipe.tick() is None
+
     pipe.add_letter("O")
     assert pipe.text == "O"
     print("text_pipeline self-check OK")
