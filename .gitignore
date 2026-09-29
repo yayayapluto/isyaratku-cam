@@ -7,6 +7,9 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
+# Konfig runtime qfluentwidgets (ditulis setTheme(save=True))
+config/
+
 # Model & voice binaries (unduh via scripts/download_models.sh)
 models/*
 !models/.gitkeep

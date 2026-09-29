@@ -1,12 +1,14 @@
 """Worker: webcam -> pengenalan -> teks -> kamera virtual + TTS.
 
 Satu thread kerja (dipanggil dari QThread di app.py, atau langsung lewat
-main() untuk smoke test). Setiap frame: flip -> model -> smoothing 4-dari-5 ->
-pipeline teks -> overlay -> pyvirtualcam.
+main() untuk smoke test). Setiap frame: model -> smoothing 4-dari-5 ->
+pipeline teks -> overlay -> pyvirtualcam. Frame tidak di-flip: output harus
+sama dengan gambar asli webcam (tanpa efek cermin).
 """
 
 from __future__ import annotations
 
+import sys
 import time
 from typing import Callable, Optional
 
@@ -35,14 +37,14 @@ def open_vcam(width: int, height: int, preferred: Optional[str] = None) -> tuple
             )
             return cam, name
         except Exception as exc:  # backend tidak terpasang / device lemah
-            # Disimpan untuk diagnosa: pesan final tetap satu baris yang
-            # bisa dibaca user, tapi log tetap tahu Unity vs OBS mana gagal.
+            # Kumpulkan untuk diagnosa di stderr, JANGAN masuk ke pesan yang
+            # dilihat user: teks itu sudah ditetapkan jadi bahasa perbaikan.
             errors.append(f"{name}: {exc}")
-    detail = " | ".join(errors) if errors else "tidak ada backend yang dicoba"
+    if errors:
+        print(f"[vcam] gagal: {' | '.join(errors)}", file=sys.stderr)
     raise RuntimeError(
         "Kamera virtual tidak ditemukan. Jalankan Install.bat Unity Capture "
-        "sebagai Administrator, lalu restart aplikasi. Cadangan: pasang OBS. "
-        f"[{detail}]"
+        "sebagai Administrator, lalu restart aplikasi. Cadangan: pasang OBS."
     )
 
 

@@ -49,6 +49,14 @@ STATE_PREPARING = "preparing"
 STATE_RUNNING = "running"
 STATE_ERROR = "error"
 
+# Tema gelap halaman: setTheme() tak mengubah QPalette di build ini (terukur:
+# palette Window tetap #efefef, TitleLabel fg tetap hitam setelah panggil),
+# jadi warna latar & teks dipasang eksplisit di sini — putih terjamin terang.
+PAGE_QSS = """
+QWidget#PageRoot { background-color: #202020; }
+QWidget#PageRoot QLabel { color: #FFFFFF; }
+"""
+
 PLACEHOLDER = "Tunjukkan isyarat huruf ke kamera"
 FONT_SIZES = {"S": 14, "M": 22, "L": 32}          # ukuran font OVERLAY
 DISPLAY_SIZES = {"S": 22, "M": 28, "L": 32}       # ukuran font kartu teks
@@ -68,7 +76,7 @@ CAM_FIX = (
 )
 STATE_TEXT = {
     STATE_STOPPED: ("Berhenti", "#8C8C8C"),
-    STATE_PREPARING: ("Menyiapkan", "#0070C0"),
+    STATE_PREPARING: ("Menyiapkan", "#4FA3E3"),
     STATE_RUNNING: ("Berjalan", "#189152"),
 }
 ERROR_TEXT = ("Terjadi masalah", "#C62C30")
@@ -93,7 +101,7 @@ class HealthChip(QLabel):
             "ok": "#1A9152",
             "warn": "#BE8214",
             "bad": "#C62C30",
-            "unchecked": "#FFFFFF4D",
+            "unchecked": "#3A3F45",
         }[level]
         text = f"{self._label_text} …" if level == "unchecked" else self._label_text
         if detail and level != "unchecked":
@@ -101,7 +109,7 @@ class HealthChip(QLabel):
         self.setText(text)
         self.setStyleSheet(
             f"HealthChip {{ background: {color}; border-radius: 6px;"
-            f" padding: 4px 10px; color: white; font-size: 13pt; }}"
+            f" padding: 4px 10px; font-size: 13pt; color: white; }}"
         )
         # Klik (bukan hover) memperlihatkan langkah perbaikan untuk
         # kuning/merah — chip hijau tidak butuh langkah apa pun.
@@ -177,6 +185,7 @@ class MainWindow(QWidget):
 
     def __init__(self, debug: bool = False) -> None:
         super().__init__()
+        self.setObjectName("PageRoot")
         self.debug = debug
         self.thread: WorkerThread | None = None
         self.state = STATE_STOPPED
@@ -186,6 +195,7 @@ class MainWindow(QWidget):
         self.setMinimumSize(360, 480)
         self._build()
         self._apply_state(STATE_STOPPED)
+        self.setStyleSheet(PAGE_QSS)   # latar gelap + label terang
         QTimer.singleShot(0, self.probe_health)
 
     # ---------- tampilan ----------
@@ -196,7 +206,7 @@ class MainWindow(QWidget):
 
         head = QHBoxLayout()
         self.title_label = TitleLabel("IsyaratKu Cam", self)
-        self.title_label.setStyleSheet("color: white;")
+        self.title_label.setStyleSheet("color: #FFFFFF;")
         self.pin_button = ToolButton(FluentIcon.PIN, self)
         self.pin_button.setCheckable(True)
         self.pin_button.setToolTip("Selalu di atas")
@@ -208,18 +218,27 @@ class MainWindow(QWidget):
 
         size_row = QHBoxLayout()
         size_label = BodyLabel("Ukuran", self)
-        size_label.setStyleSheet("color: white;")
+        size_label.setStyleSheet("color: #FFFFFF;")
         self.size_seg = SegmentedWidget(self)
         for key in ("S", "M", "L"):
             self.size_seg.insertItem(
                 list(FONT_SIZES).index(key), key, key
             )
-        # PivotItem dasar memaksa color: black di semua state; tambahkan
-        # override putih supaya S/M/L terang seperti widget Fluent lain.
+        # QSS milik halaman TIDAK sampai ke PivotItem: tiap item punya
+        # stylesheet sendiri (15 aturan, paksa color: black di semua state),
+        # dan paksa itu menang atas aturan induk. Jadi warna dipasang langsung
+        # di tiap item: putih saat tak terpilih, hitam di atas pil terpilih.
+        # Terukur render: glyph putih 36px di atas latar transparan.
+        self.size_seg.setStyleSheet("background: transparent;")
         for item in self.size_seg.items.values():
             item.setStyleSheet(
-                item.styleSheet() + "\nSegmentedItem { color: white; }"
+                item.styleSheet()
+                + "\nPivotItem { color: white; }"
             )
+            # WAJIB setelah mengubah stylesheet item: tanpa polish ulang,
+            # aturan lama (paksa hitam) tetap dipakai & huruf tak terlihat.
+            item.style().unpolish(item)
+            item.style().polish(item)
         self.size_seg.setCurrentItem("M")
         self.size_seg.currentItemChanged.connect(self.on_size_changed)
         size_row.addWidget(size_label)
@@ -245,14 +264,14 @@ class MainWindow(QWidget):
         self.text_label.setWordWrap(True)
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.text_label.setMinimumHeight(150)
-        self.text_label.setStyleSheet("color: #909097; font-weight: 600;")
+        self.text_label.setStyleSheet("color: #9099A6; font-weight: 600;")
         self.text_label.setFont(QFont("", self._display_size()))
         card_box.addWidget(self.text_label)
         self.candidate_label = CaptionLabel(
             "Tunjukkan isyarat huruf ke kamera", self.text_card
         )
         self.candidate_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.candidate_label.setStyleSheet("color: #70706F;")
+        self.candidate_label.setStyleSheet("color: #9AA3AE;")
         card_box.addWidget(self.candidate_label)
         root.addWidget(self.text_card, 1)
 
@@ -283,7 +302,7 @@ class MainWindow(QWidget):
         error_box.setContentsMargins(14, 12, 14, 12)
         error_box.setSpacing(6)
         self.error_label = StrongBodyLabel("Error", self.error_card)
-        self.error_label.setStyleSheet("color: #C62C30;")
+        self.error_label.setStyleSheet("color: #FF6B6B;")
         error_box.addWidget(self.error_label)
         self.error_text = CaptionLabel("", self.error_card)
         self.error_text.setWordWrap(True)
@@ -304,7 +323,7 @@ class MainWindow(QWidget):
             "Kamera virtual dipakai: ditampilkan setelah Mulai.", self
         )
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet("color: #70706F;")
+        hint.setStyleSheet("color: #9AA3AE;")
         root.addWidget(hint)
         self.hint_label = hint
 
@@ -329,7 +348,7 @@ class MainWindow(QWidget):
             self.error_card.hide()
         if state == STATE_STOPPED:
             self.text_label.setText(PLACEHOLDER)
-            self.text_label.setStyleSheet("color: #909097; font-weight: 600;")
+            self.text_label.setStyleSheet("color: #9099A6; font-weight: 600;")
         if state != STATE_PREPARING and state != STATE_RUNNING:
             self.candidate_label.setText("Tunjukkan isyarat huruf ke kamera")
 
@@ -344,7 +363,7 @@ class MainWindow(QWidget):
             return
         self.error_card.hide()
         self.text_label.setText(PLACEHOLDER)
-        self.text_label.setStyleSheet("color: #909097; font-weight: 600;")
+        self.text_label.setStyleSheet("color: #9099A6; font-weight: 600;")
         self._apply_state(STATE_PREPARING)
         self.text_label.setFont(QFont("", self._display_size()))
         self.thread = WorkerThread(
@@ -386,7 +405,7 @@ class MainWindow(QWidget):
         if not text:
             return
         self.text_label.setText(text)
-        self.text_label.setStyleSheet("color: #202020;")
+        self.text_label.setStyleSheet("color: #FFFFFF;")
 
     def on_candidate(self, letter: str) -> None:
         if letter:
