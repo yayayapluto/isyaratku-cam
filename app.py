@@ -106,13 +106,14 @@ class HealthChip(QLabel):
             "bad": "#C62C30",
             "unchecked": "#3A3F45",
         }[level]
-        text = f"{self._label_text} …" if level == "unchecked" else self._label_text
-        if detail and level != "unchecked":
-            text = f"{self._label_text} · {detail}"
-        self.setText(text)
+        detail_line = f"\n{detail}" if detail and level != "unchecked" else ""
+        self.setText(self._label_text + detail_line)
         self.setStyleSheet(
             f"HealthChip {{ background: {color}; border-radius: 6px;"
-            f" padding: 4px 10px; font-size: 10pt; color: white; }}"
+            f" padding: 5px 4px; font-size: 10pt; color: white; }}"
+        )
+        self.setAlignment(
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
         )
         # Klik (bukan hover) memperlihatkan langkah perbaikan untuk
         # kuning/merah — chip hijau tidak butuh langkah apa pun.
@@ -232,8 +233,12 @@ class MainWindow(QWidget):
         self.state = STATE_STOPPED
         self._last_spoken: list[str] = []
         self.setWindowTitle("IsyaratKu Cam")
+        # Responsif: jendela boleh diregang user, tapi diberi batas lebar dan
+        # tinggi supaya layout tetap wajar (tidak melar tak terhingga, tidak
+        # jadi terlalu kecil sampai widget bertumpuk).
         self.resize(420, 560)
         self.setMinimumSize(360, 480)
+        self.setMaximumSize(520, 720)
         self._build()
         self._apply_state(STATE_STOPPED)
         self.setStyleSheet(PAGE_QSS)   # latar gelap + label terang
@@ -335,20 +340,17 @@ class MainWindow(QWidget):
             recent_box.addWidget(row)
         root.addWidget(recent)
 
-        # Chip sekarang mewrapping teks dan boleh memakai dua baris di lebar
-        # kecil. Sebelumnya ukuran chip dibatasi hingga "Mikrofon · CABLE
-        # Output" terpotong jadi "Mikrofon · CABLE Outp" — sekarang teks
-        # pindah baris.
+        # Chip: satu baris, tiga kolom sama lebar. Dulu wordWrap membuat
+        # setiap chip jadi kolom sempit (terlihat seperti 4 kolom berjejal)
+        # dan tinggi tak rata. Sekarang detail ditampilkan di baris kedua
+        # yang lebih kecil — label utama tetap terbaca utuh.
         chips = QHBoxLayout()
         chips.setSpacing(8)
         self.chip_cam = HealthChip("Kamera virtual", CAM_FIX, self)
         self.chip_mic = HealthChip("Mikrofon", MIC_FIX, self)
         self.chip_model = HealthChip("Model", MODEL_FIX, self)
         for chip in (self.chip_cam, self.chip_mic, self.chip_model):
-            chip.setWordWrap(True)
-            chip.setMinimumWidth(88)
-            chips.addWidget(chip)
-        chips.addStretch(1)
+            chips.addWidget(chip, 1)   # bobot sama -> tiga kolom sama lebar
         root.addLayout(chips)
 
         self.error_card = dark_card(CardWidget(self))
@@ -481,14 +483,16 @@ class MainWindow(QWidget):
         if cam and self.state == STATE_PREPARING:
             self._apply_state(STATE_RUNNING)
         if cam == "unitycapture":
-            self.chip_cam.set_ok("Unity Video Capture")
+            # Detail dipendek agar chip tetap satu baris di lebar 360px;
+            # nama lengkap tetap ada di tooltip.
+            self.chip_cam.set_ok("Unity Capture")
         elif cam == "obs":
-            self.chip_cam.set_warn("OBS Virtual Camera")
+            self.chip_cam.set_warn("OBS")
         else:
             self.chip_cam.set_bad()
         mic = data.get("virtual_mic")
         if mic:
-            self.chip_mic.set_ok("CABLE Output")
+            self.chip_mic.set_ok("CABLE")
         else:
             self.chip_mic.set_bad()
         if data.get("model"):
