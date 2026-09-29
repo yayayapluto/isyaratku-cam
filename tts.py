@@ -71,14 +71,26 @@ def cable_output_device() -> int:
 _queue: Optional["queue.Queue[str]"] = None
 DEBUG_MONITOR = "--debug" in sys.argv   # speaker nyata, bukan CABLE Input
 
-def speak_async(text: str) -> None:
-    """Antre ucapan; thread daemon memulainya. Tidak pernah menahan loop video:
-    worker video tetap mengirim frame selagi audio diputar terpisah."""
+def _ensure_worker() -> None:
+    """Buat antrean + thread daemon TTS sekali saja (dipakai prewarm/enqueue)."""
     global _queue
     if _queue is None:
         _queue = queue.Queue()
         threading.Thread(target=_tts_worker, daemon=True,
                          name="isyaratku-tts").start()
+
+
+def prewarm() -> None:
+    """Muat voice SEBELUM loop video: pemanggilan pertama ~1,7 s, dan di luar
+    loop itu tak terlihat sebagai freeze. Aman dipanggil berulang (no-op)."""
+    _ensure_worker()
+    _queue.put("")
+
+
+def speak_async(text: str) -> None:
+    """Antre ucapan; thread daemon memulainya. Tidak pernah menahan loop video:
+    worker video tetap mengirim frame selagi audio diputar terpisah."""
+    _ensure_worker()
     # Antrean dibiarkan panjang: kata yang dibuang di tengah jalan terdengar
     # terpotong. Backlog dibersihkan hanya kalau sudah terlalu jauh (>6),
     # supaya ucapan tetap natural walau user berhenti agak terlambat.
@@ -86,6 +98,7 @@ def speak_async(text: str) -> None:
         _queue.get_nowait()
         _queue.task_done()
     _queue.put(text)
+
 
 _last_error: str = ""   # kegagalan terakhir; dibaca worker untuk status debug
 

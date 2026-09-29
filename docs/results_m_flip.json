@@ -1,6 +1,14 @@
 {
   "dataset": "data/bisindo_rhio train+test",
-  "input": "crop bbox VOC + padding 20 lalu LETTERBOX persegi (resep identik crop_hand hand_detect.py:79-89, hanya bbox dari XML bukan landmark MediaPipe)",
+  "input": "bbox VOC -> clamp -> +20 pad -> clamp -> letterbox persegi -> skip kalau kotak <32px; flip pada crop, bukan frame",
+  "dipakai": 520,
+  "dilewati": {
+    "label_tak_dikenal": 0,
+    "gambar_hilang": 0,
+    "gagal_baca": 0,
+    "kotak_kosong": 0,
+    "kecil": 0
+  },
   "per_mode": {
     "asli": {
       "benar": 303,

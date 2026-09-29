@@ -249,6 +249,11 @@ class Worker:
             except tts.TtsUnavailable as exc:
                 self.tts_error = str(exc)  # video tetap jalan tanpa suara
                 speak = None
+            else:
+                # Muat voice + buka thread TTS sebelum webcam dibuka: biaya
+                # sekali jalan (~1,7 s panggilan pertama) di luar loop, jadi
+                # tidak muncul sebagai freeze saat kata pertama terbentuk.
+                tts.prewarm()
         self._pipeline = text_pipeline.TextPipeline(speak=speak)
 
         try:

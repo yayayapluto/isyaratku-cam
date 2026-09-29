@@ -270,21 +270,22 @@ class MainWindow(QWidget):
             self.size_seg.insertItem(
                 list(FONT_SIZES).index(key), key, key
             )
-        # QSS milik halaman TIDAK sampai ke PivotItem: tiap item punya
-        # stylesheet sendiri (15 aturan, paksa color: black di semua state),
-        # dan paksa itu menang atas aturan induk. Jadi warna dipasang langsung
-        # di tiap item: putih saat tak terpilih, hitam di atas pil terpilih.
-        # Terukur render: glyph putih 36px di atas latar transparan.
+        # Kelas tiap item = `SegmentedItem` (terukur), dan sheet bawaan hanya
+        # memaksa warna gelap untuk state terpilih (`[isSelected=true]:hover/:
+        # pressed`). Slot unselected kosong, jadi aturan kelas polos di bawah
+        # mengisi tepat: S/L putih di atas kartu gelap, M tetap gelap di atas
+        # pil terang.
         self.size_seg.setStyleSheet("background: transparent;")
         for item in self.size_seg.items.values():
             item.setStyleSheet(
                 item.styleSheet()
-                + "\nPivotItem { color: white; }"
+                + "\nSegmentedItem { color: white; }"
             )
             # WAJIB setelah mengubah stylesheet item: tanpa polish ulang,
             # aturan lama (paksa hitam) tetap dipakai & huruf tak terlihat.
             item.style().unpolish(item)
             item.style().polish(item)
+
         self.size_seg.setCurrentItem("M")
         self.size_seg.currentItemChanged.connect(self.on_size_changed)
         size_row.addWidget(size_label)
@@ -328,6 +329,7 @@ class MainWindow(QWidget):
         recent_head = SubtitleLabel("Diucapkan terakhir", recent)
         # SubtitleLabel juga punya QSS sendiri (color: black).
         tint(recent_head, "#FFFFFF")
+        recent_head.setAlignment(Qt.AlignmentFlag.AlignCenter)
         recent_box.addWidget(recent_head)
         self.recent_labels = [
             CaptionLabel("—", recent) for _ in range(3)
@@ -337,6 +339,7 @@ class MainWindow(QWidget):
             tint(row, "#E8EAED")
         for row in self.recent_labels:
             row.setWordWrap(True)
+            row.setAlignment(Qt.AlignmentFlag.AlignCenter)
             recent_box.addWidget(row)
         root.addWidget(recent)
 
