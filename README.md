@@ -13,12 +13,12 @@ tetapi tidak dapat berbicara. Subtema: **"Akses untuk Semua"** (SDG 3, 10, 16).
 ## Arsitektur
 
 ```
-webcam (native res) → flip → MediaPipe Hands (num_hands=2)
-  → crop bbox +20px, letterbox persegi (hand_detect.py)
-  → resize 224×224, ImageNet norm (recognizer.py)
-  → EfficientNet-B3 A–Z → confidence
-  → Smoother 4-dari-5 (recognizer.py)
-  → huruf → kata → kalimat (text_pipeline.py)
+webcam (native res, backend MSMF) → MediaPipe Hands (num_hands=2, tiap 2 frame)
+  → crop bbox +10px, letterbox persegi (hand_detect.py)
+  → resize 260×260, ImageNet norm, tanpa flip (recognizer.py)
+  → EfficientNet-B3 A–Z → confidence gate 0,45
+  → settle 3 frame + bbox stabil → Smoother 4-dari-5 (recognizer.py)
+  → huruf → kata (koreksi KBBI saat flush) → kalimat (text_pipeline.py)
   → overlay subtitle putih, wrap baris (worker.py) → Unity Video Capture
                         (Unity Capture utama, OBS Virtual Camera cadangan)
                         └→ tangan absen 1,2 dtk → Piper TTS per KATA → VB-Cable
@@ -46,8 +46,10 @@ satu kata — jeda antar-huruf lebih dari itu akan memecah kata.
 |---|---|
 | `app.py` | GUI PySide6/qfluentwidgets: tombol MULAI/HENTIKAN, badge status, chip kesehatan, S/M/L. Thread worker dipisah dari UI. |
 | `worker.py` | Loop utama: buka webcam → deteksi → klasifikasi → smoothing → overlay → kirim ke kamera virtual. `draw_text()` adalah satu-satunya penerjemah teks (dipakai debug & produksi). |
-| `hand_detect.py` | `HandDetector` (MediaPipe Tasks, `num_hands=2`, singleton modul) dan `crop_hand()` (bbox + padding 20px, letterbox ke persegi). |
-| `recognizer.py` | `build_model()` memuat bobot EfficientNet-B3 + urutan label; `preprocess()` normalisasi 224×224; `Smoother()` kebijakan 4-dari-5. |
+| `hand_detect.py` | `HandDetector` (MediaPipe Tasks, `num_hands=2`, singleton modul) dan `crop_hand()` (bbox + padding 10px, letterbox ke persegi). |
+| `recognizer.py` | `build_model()` memuat bobot EfficientNet-B3 + urutan label; `preprocess()` normalisasi 260×260; `Smoother()` kebijakan 4-dari-5. |
+| `kata.py` | Kamus KBBI (67.662 kata) + `correct_word()`: skor −Σlog(p) per posisi memilih kata kamus paling mungkin saat buffer huruf di-flush. |
+| `logs.py` | stdlib `logging` (satu-satunya jalur): `logs/isyaratku.log` (INFO) + `logs/isyaratku-debug.log` (DEBUG, `dur_ms=` per tahap pipeline). |
 | `text_pipeline.py` | Buffer huruf → kata → kalimat; `tick()` memicu TTS per kata (tangan absen ≥ 1,2 dtk) dan membersihkan buffer saat kalimat selesai (≥ 3 dtk). `mark_present()` dipanggil tiap frame tangan ada agar timer absen tidak salah jalan. |
 | `tts.py` | Piper ONNX → VB-Cable "CABLE Input" (WASAPI 48 kHz), resample 22050→48000. `speak_async()` antre tanpa memotong backlog + thread daemon (COM diinisialisasi supaya WASAPI mau memutar audio) supaya audio tidak menghentikan loop video; `drain()` tunggu kata terakhir saat BERHENTI. |
 | `scripts/` | verifikasi & tooling, lihat bawah. |
@@ -133,8 +135,10 @@ diatribusi ke crop atau ke model.
 - Crop tangan > full frame: **64% vs 23%** → model dilatih pada crop tangan,
   jalur produksi benar.
 - Deteksi MediaPipe di citra dataset: **76/78 (97%)** → detektor sehat.
-- Preprocessing: 224×224 + ImageNet normalisasi konfigurasi terbaik
-  (65% vs 56% half, 38% raw).
+- Preprocessing: 260×260 + ImageNet normalisasi konfigurasi terbaik pada
+  dataset VOC 520 citra (68,65% vs 224×224 58,27%); padding 10px > 20px
+  (68,65% vs 68,08%); flip crop malah menurunkan (68,65% → 64,62%).
+  Ukur ulang: `python scripts/eval_offline.py`.
 
 **Isu terbuka:** model dilatih dengan 9.169 citra; dataset publik BISINDO hanya
 520 citra. Retrain dari dataset publik berisiko regresi akurasi. Dataset tetap

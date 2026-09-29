@@ -20,8 +20,9 @@ pipeline ditukar dengan antrean thread-safe (`queue.Queue`) berkapasitas kecil.
 │  2. hands = mp.solutions.hands.Hands                           │
 │  3. model = load('models/bisindo_alphabet/')   # PyTorch          │
 │  4. while running:                                                │
-│        frame → flip → mediapipe hands                             │
-│        crop bbox tangan (padding) → resize → torch → kelas        │
+│        frame (tanpa flip) → mediapipe hands (tiap 2 frame)          │
+│        crop bbox (padding 10px) → 260×260 → gate 0,45 → settle 3   │
+│        → torch → kelas → smoother 4-dari-5                         │
 │        ── pipeline teks ── (lihat §4)                              │
 │        draw overlay → vcam.send(frame) → vcam.sleep_until_next_frame│
 └───────────────────────────────┬──────────────────────────────────┘
@@ -109,7 +110,9 @@ Max ~600 baris kode inti; kandidat rujukan sebelum menulis kode baru:
 ## 4. Pipeline Pengenalan + Smoothing + Huruf→Kata→Kalimat
 
 1. Frame → MediaPipe Hands. Jika tidak ada tangan → `hand_absent` + timer jalan.
-2. Ada tangan → crop bbox (padding 20px) → resize 224×224 → model A-Z → label.
+2. Ada tangan → crop bbox (padding 10px) → resize 260×260 → model A-Z
+   → label; gate confidence 0,45 + settle 3 frame + bbox stabil sebelum
+   huruf diterima (menolak frame transisi antar gestur).
 3. **Smoothing**: deque berisi 5 prediksi terakhir. Label dianggap stabil
    jika ≥ 4 dari 5 identik. Mencegah jitter sajian demo.
 4. **Huruf→kata**: saat label stabil dan berbeda dari label terakhir yang
