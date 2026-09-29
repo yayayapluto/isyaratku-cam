@@ -23,6 +23,7 @@ desktop.ini
 
 # Artefak demo & log
 *.log
+logs/
 recordings/
 
 # espeak-ng lokal (extract MSI via msiexec /a; ~50MB, binary)
