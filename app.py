@@ -545,11 +545,9 @@ def main() -> None:
     args = parser.parse_args()
 
     app = QApplication(sys.argv)  # Qt mengabaikan --debug argparse
-    # Card melukis latar lewat paintEvent/isDarkTheme() — BUKAN QSS, jadi
-    # aturan halaman tak pernah mengubahnya. setTheme(save=False) memindahkan
-    # isDarkTheme()->True sehingga card jadi gelap; save=False tak menulis
-    # config ke disk user.
-    setTheme(Theme.DARK)
+    # Card TIDAK digelapkan lewat QSS maupun setTheme (keduanya terukur gagal:
+    # CardWidget tetap terang; paintEvent baca from BackgroundColorObject).
+    # Warna ditimpa langsung di dark_card() waktu konstruksi card.
     window = MainWindow(debug=args.debug)
     window.show()
     sys.exit(app.exec())
