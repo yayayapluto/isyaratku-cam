@@ -5,5 +5,6 @@ pyvirtualcam
 sounddevice
 piper-tts
 torch
+torchvision
 PySide6
 PySide6-Fluent-Widgets
