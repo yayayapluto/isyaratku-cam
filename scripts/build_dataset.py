@@ -2,9 +2,10 @@
 
 Setiap sumber = <path>:<format>, format ada dua:
 
-  voc     bbox dimuat dari anotasi Pascal VOC
-          <root>/collectedimages/{train,test}/*.jpg + *.xml
-  folders <root>/<LETTER>/*.jpg tanpa anotasi; bbox dihitung MediaPipe saat build
+  voc     bbox dimuat dari anotasi Pascal VOC; kedua layout diterima:
+          <root>/collectedimages/{train,test}/ ATAU <root>/{train,test}/
+          (*.jpg + *.xml). Bila keduanya ada, tiap direktori split dibaca
+          sekali — folder yang sama tidak dibaca dua kali.
 
 Citra keluar selalu HAND CROP: potong bbox, letterbox PADDING, resize
 260x260 (jalur sama dengan produksi, lihat docs/MODEL_SELECTION.md §3).
@@ -20,6 +21,7 @@ direproduksi — seed yang sama selalu memberi pembagian yang sama.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import random
 import sys
@@ -50,40 +52,65 @@ def _landmarks_from_bbox(
             (x1 / w, y1 / h), (x0 / w, y1 / h)]
 
 
+def _voc_candidate_dirs(root: str) -> list[str]:
+    """Folder VOC yang mungkin berisi pasangan *.jpg + *.xml per split.
+
+    Layout yang diterima (urut prioritas, direktorinya di-dedupe):
+      1. <root>/collectedimages/<split>   (layout VOC asli rhio)
+      2. <root>/<split>                   (layout repo saat ini)
+    """
+    dirs: list[str] = []
+    for base in (os.path.join(root, "collectedimages"), root):
+        for split in _VOC_SPLITS:
+            folder = os.path.join(base, split)
+            if not os.path.isdir(folder):
+                continue
+            real = os.path.realpath(folder)
+            if real not in dirs:
+                dirs.append(real)
+    return dirs
+
+
+def _read_voc_annotations(
+    items: list[tuple[str, str, np.ndarray]], folder: str
+) -> int:
+    """Baca satu folder VOC -> items; balikin jumlah pasangan jpg+xml valid."""
+    staged = 0
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".xml"):
+            continue
+        jpg = os.path.join(folder, name[:-4] + ".jpg")
+        if not os.path.exists(jpg):
+            _LOG.warning("xml tanpa citra: %s", jpg)
+            continue
+        frame = cv2.imread(jpg)
+        if frame is None:
+            _LOG.warning("citra tidak terbaca: %s", jpg)
+            continue
+        tree = ET.parse(os.path.join(folder, name))
+        obj = tree.getroot().find("object")
+        if obj is None:
+            _LOG.warning("xml tanpa object: %s", name)
+            continue
+        letter = (obj.findtext("name") or "").strip().upper()
+        box = obj.find("bndbox")
+        if letter not in LETTERS or box is None:
+            _LOG.warning("anotasi tidak valid (label/bbox): %s", name)
+            continue
+        h, w = frame.shape[:2]
+        items.append((letter, jpg, _landmarks_from_bbox(
+            int(box.findtext("xmin")), int(box.findtext("ymin")),
+            int(box.findtext("xmax")), int(box.findtext("ymax")), w, h
+        )))
+        staged += 1
+    return staged
+
+
 def read_voc_source(root: str) -> list[tuple[str, str, np.ndarray]]:
     """Baca sumber voc -> daftar (huruf, path_jpg, landmarks)."""
     items: list[tuple[str, str, np.ndarray]] = []
-    for split in _VOC_SPLITS:
-        folder = os.path.join(root, "collectedimages", split)
-        if not os.path.isdir(folder):
-            continue
-        for name in sorted(os.listdir(folder)):
-            if not name.endswith(".xml"):
-                continue
-            jpg = os.path.join(folder, name[:-4] + ".jpg")
-            if not os.path.exists(jpg):
-                _LOG.warning("xml tanpa citra: %s", jpg)
-                continue
-            frame = cv2.imread(jpg)
-            if frame is None:
-                _LOG.warning("citra tidak terbaca: %s", jpg)
-                continue
-            tree = ET.parse(os.path.join(folder, name))
-            obj = tree.getroot().find("object")
-            if obj is None:
-                _LOG.warning("xml tanpa object: %s", name)
-                continue
-            letter = (obj.findtext("name") or "").strip().upper()
-            box = obj.find("bndbox")
-            if letter not in LETTERS or box is None:
-                _LOG.warning("anotasi tidak valid (label/bbox): %s", name)
-                continue
-            h, w = frame.shape[:2]
-            lm = _landmarks_from_bbox(
-                int(box.findtext("xmin")), int(box.findtext("ymin")),
-                int(box.findtext("xmax")), int(box.findtext("ymax")), w, h
-            )
-            items.append((letter, jpg, lm))
+    for folder in _voc_candidate_dirs(root):
+        _read_voc_annotations(items, folder)
     return items
 
 
@@ -161,6 +188,7 @@ def build(
 ) -> int:
     detector = load_detector() if any(f == "folders" for _, f in sources) else None
     by_letter: dict[str, list[tuple[str, np.ndarray]]] = {}
+    seen_hashes: set[str] = set()  # md5 crop, lintas sumber: pertama menang
 
     for root, fmt in sources:
         staged: list[tuple[str, str, object]] = (
@@ -180,6 +208,12 @@ def build(
                 )
                 skipped += 1
                 continue
+            digest = hashlib.md5(image.tobytes()).hexdigest()
+            if digest in seen_hashes:
+                _LOG.warning("crop duplikat lintas sumber, dilewati: %s", jpg_path)
+                skipped += 1
+                continue
+            seen_hashes.add(digest)
             by_letter.setdefault(letter, []).append((jpg_path, image))
         print(f"sumber {root} ({fmt}): {len(staged) - skipped} citra, "
               f"{skipped} dilewati")
