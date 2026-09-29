@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import os
 import random
+import shutil
 import sys
 import xml.etree.ElementTree as ET
 from typing import Optional
@@ -41,6 +42,13 @@ from recognizer import INPUT_SIZE
 LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)]
 _VOC_SPLITS = ("train", "test")
 _LOG = logs.get_logger()
+
+
+def _reset_out(out: str) -> None:
+    """Buang train/val lama supaya sisa crop build sebelumnya tidak ikut
+    terpakai (LetterDataset membaca semua isi folder)."""
+    for split in ("train", "val"):
+        shutil.rmtree(os.path.join(out, split), ignore_errors=True)
 
 
 def _landmarks_from_bbox(
@@ -207,6 +215,7 @@ def build(
     sources: list[tuple[str, str]], out: str, val_split: float, seed: int
 ) -> int:
     detector = load_detector() if any(f == "folders" for _, f in sources) else None
+    _reset_out(out)
     by_letter: dict[str, list[tuple[str, np.ndarray]]] = {}
     seen_hashes: set[str] = set()  # md5 crop, lintas sumber: pertama menang
 
