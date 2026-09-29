@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import queue
 import shutil
+import sys
 import threading
 
 import numpy as np
@@ -67,9 +68,8 @@ def cable_output_device() -> int:
         raise TtsUnavailable("VB-Cable tidak ditemukan (pasang vb-audio.com/Cable)")
     return best
 
-
 _queue: Optional["queue.Queue[str]"] = None
-
+DEBUG_MONITOR = "--debug" in sys.argv   # speaker nyata, bukan CABLE Input
 
 def speak_async(text: str) -> None:
     """Antre ucapan; thread daemon memulainya. Tidak pernah menahan loop video:
@@ -127,7 +127,13 @@ def _emit(text: str) -> None:
 
     import sounddevice as sd
 
-    device = cable_output_device()
+    # Mode debug: keluarkan ke speaker nyata supaya bisa didengar saat
+    # kembangkan (CABLE Input cuma didengar aplikasi seperti Zoom/Meet).
+    # query_devices(None) mengembalikan seluruh tabel device — indeks default
+    # harus diresolve dulu, kalau tidak TypeError.
+    import sounddevice as sd
+
+    device = sd.default.device[1] if DEBUG_MONITOR else cable_output_device()
     dst_rate = int(sd.query_devices(device)["default_samplerate"])
     if dst_rate != src_rate:
         # ponytail: resample linear (np.interp), tambah soxr bila kualitas kurang
