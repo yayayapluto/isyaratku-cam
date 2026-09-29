@@ -39,13 +39,13 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 
 | # | Asumsi | Status | Dasar |
 |---|---|---|---|
-| A1 | Ukuran input 224×224 | **[ASUMSI]** | Model card diam; default EfficientNet-B3 |
+| A1 | Ukuran input 260×260 | **Terukur** | Dataset VOC 520 citra: 68,65% (vs 224×224 58,27%) — `scripts/eval_offline.py` |
 | A2 | Normalisasi ImageNet (0,485/0,456/0,406 + 0,229/0,224/0,225) | **[ASUMSI]** | Model card diam; sesuai riset EfficientNet-B3 |
 | A3 | Frame masuk BGR (cv2 default) | Divalidasi | `recognizer.preprocess:51` `COLOR_BGR2RGB` |
-| A4 | Crop bbox tangan + padding 20px | Divalidasi | TECH_SPEC §4.2 |
+| A4 | Crop bbox tangan + padding 10px | **Terukur** | Dataset VOC 520 citra: pad10 68,65% > pad20 68,08% |
 | A5 | **Letterbox persegi** sebelum resize 224×224 | **[ASUMSI]** | Bbox tangan TINGGI; squash merusak bentuk huruf |
 | A6 | `num_hands=2` (landmark kedua tangan digabung) | **[ASUMSI]** | Sebagian huruf BISINDO memakai dua tangan |
-| A7 | Gate confidence > 0,3 sebelum huruf diterima | Divalidasi | Turun dari 0,5: conf rata crop benar 0,48 |
+| A7 | Gate confidence > 0,45 sebelum huruf diterima | **Terukur** | 260/pad10: conf benar p20=0,373, conf salah p80=0,344 → sisa 71% benar, 2,7% salah |
 | A8 | Smoothing 4-dari-5 | Divalidasi | FR/AC + TEST |
 | A9 | Flush **kata** saat tangan absen ≥ 1,2 dtk; flush **kalimat** ≥ 3 dtk | Divalidasi | FR-07/AC-03/TECH_SPEC §4.5 |
 
@@ -60,6 +60,14 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 | Overlay subtitle putih | 2593 pixel putih di area bawah, read-back 640×480 (ambang 150) | `scripts/verify_m1.py` |
 | Hand-absence flush | self-check hijau: `tick()` dua kali → "HI" | `text_pipeline.py` |
 | TTS ke VB-Cable | RMS=183,9, peak=32768 | `scripts/verify_m5.py` |
+| Akurasi 260×260 + pad10 + TANPA flip | **354/520 = 68,65%**, forward rata 68 ms (16 core, threads 8) | `scripts/eval_offline.py` |
+| Flip crop sebelum resize | **menurunkan di semua konfigurasi**: 260/pad10 68,65% → 64,62% | variasi manual |
+| Padding crop 10 vs 20 px | pad10 68,65% vs pad20 68,08% | variasi `PADDING` |
+| Gate 0,30 / 0,45 / 0,50 pada 260/pad10 | benar ~100% → 71% → 62%; salah konsisten menurun | distribusi conf |
+| Backend capture Windows | `CAP_DSHOW` 6,9–7,0 read/s · `CAP_MSMF` 21,7–23,1 · `CAP_ANY` 22,1–22,2 | ukur 2 s × 3 trial × 4 resolusi |
+| Forward model 260 px (threads torch) | 1/2/4/8 = 112,9/79,0/63,8/60,8 ms | matriks forward miner |
+| Deteksi MediaPipe | 11,8–13,2 ms, tak bergantung resolusi/num_hands | ukur langsung |
+| Settle 3 frame + bbox stabil | simulasi 520 citra: akurasi mayoritas 76,9% (identik Smoother 4-of-5) | simulasi window/streak |
 
 ## 5. Belum terukur — prasyyat angka akurasi di iklan
 
@@ -92,12 +100,14 @@ Simpulan:
   `crop_hand()` benar.
 - Letterbox == squash pada toleransi ini (82/129 identik). Perhatikan: crop uji
   memakai anotasi bbox VOC, sedangkan `worker.py` memakai landmark MediaPipe
-  + PADDING=20 — geometri crop berbeda. Kesetaraan di sini berarti letterbox
+  + PADDING=10 — geometri crop berbeda. Kesetaraan di sini berarti letterbox
   **tidak teruji terpisah**, bukan terbukti gratis/benar.
 - Deteksi MediaPipe pada citra dataset: **76/78 (97%)** → detektor sehat.
   Hasil 0/40 di webcam berarti tidak ada tangan di frame, bukan bug.
-- Sweep ukuran/normalisasi: 224×224 + ImageNet **65%**, half 56%, raw 38%,
-  300×300 67% → asumsi A1/A2 benar.
+- Sweep ukuran/normalisasi (jalur crop VOC, dataset 130 citra): 224×224 +
+  ImageNet **65%**, half 56%, raw 38%, 300×300 67% → asumsi A2 benar.
+  Sweep ulang 520 citra (`scripts/eval_offline.py`): 260×260 **68,65%** vs
+  224×224 58,27% dan 300×300 67% → A1 kini **terukur** (lihat §3).
 
 **Sisa pertanyaan:** 64% jauh di bawah 98.6% di model card. Bobot `Syizuril`
 dilatih dengan 9.169 citra (bukan 520 dari dataset ini), jadi gap wajar.

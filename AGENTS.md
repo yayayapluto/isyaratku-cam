@@ -21,22 +21,9 @@ python scripts/check_env.py          # cek device virtual + file model + espeak-
 # Run
 python app.py
 
-# Test model seleksi (M2)
+# Test & ukur
 python scripts/test_webcam.py
-```
-
-## Struktur folder
-
-```
-docs/        PRD.md TECH_SPEC.md BUILD_ORDER.md MODEL_SELECTION.md
-app.py      GUI PySide6: tombol start/stop, badge status, S/M/L, chip kesehatan
-worker.py    thread kerja: capture, deteksi, recognizer, overlay, vcam send
-recognizer.py  load model PyTorch + prediksi + smoothing 4-of-5
-text_pipeline.py huruf -> kata -> kalimat + timer: kata (1,2dtk) / kalimat (3dtk)
-tts.py       Piper ONNX -> device VB-Cable (cari by name)
-virtual_cam.py pyvirtualcam send + gambar overlay teks
-scripts/     download_models.sh, test_webcam.py, check_env.py
-models/      bobot model + voice (tidak di-commit)
+python scripts/eval_offline.py       # akurasi dataset VOC-AC, log.* stdout
 ```
 
 Baca `docs/PRD.md` minimal bagian FR/AC saat menyentuh requirement,
@@ -52,17 +39,12 @@ saat mengerjakan milestone. ID `FR-xx`/`AC-xx` konsisten antar dokumen.
   `# ponytail: <batas>, upgrade path <...>`.
 - Model & voice tidak masuk git; `models/.gitkeep` saja. Unduh via
   `scripts/download_models.sh`.
-
-## Aturan anti-overengineering (WAJIB)
-
-- Satu proses, satu thread kerja untuk kamera+AI; tanpa asyncio, database,
-  plugin system, config UI, logging framework, atau abstraksi berlapis.
-- Total kode inti < ~600 baris, maksimal ~8 file.
-- Pakai kode/contoh dari repo dan model yang sudah ada sebelum menulis baru.
-- Fitur di luar bagian MUST di PRD TIDAK boleh dikerjakan.
-- Pengujian cukup smoke test manual + checklist demo; bukan test suite.
-- Luar scope: preview di aplikasi, GUI rekam/latih, kalimat isyarat kontinu,
-  dua tangan penuh, hotkey, akun/cloud, pilihan perangkat.
+- Logging: stdlib `logging` saja, dipusatkan di `logs.py` (`setup_logging()`,
+  `get_logger()`); **tanpa framework logging pihak ketiga**. Handler dipasang
+  pada logger bernama `isyaratku`, BUKAN root logger (root INFO membuang semua
+  DEBUG). Produksi jangan `print()` kecuali `__main__` self-check. Keluaran
+  masuk `logs/isyaratku.log` (INFO) dan `logs/isyaratku-debug.log` (DEBUG,
+  beserta `dur_ms=` per tahap); dua file itu di `.gitignore`.
 
 ## Prasyarat lingkungan (di luar pip)
 
@@ -75,8 +57,9 @@ saat mengerjakan milestone. ID `FR-xx`/`AC-xx` konsisten antar dokumen.
 - Lisensi BELUM diverifikasi: voice Piper `id-ID-news_tts-medium` (MODEL_CARD) dan
   repo model `Syizuril/bisindo-sign-language` (tanpa lisensi tertulis). Tidak
   boleh di-bundle/distribusi ulang sebelum dicek — tulis di README.
-- Model A-Z: urutan label A-Z, ukuran input, dan normalisasi BELUM
-  terdokumentasi → `[ASUMSI]` sampai divalidasi webcam di M2.
+- Model A-Z: label A-Z sudah diverifikasi dari checkpoint. Ukuran input
+  (260×260) & padding (10 px) sudah terukur (`docs/MODEL_SELECTION.md §3`,
+  `scripts/eval_offline.py`) → ganti `[ASUMSI]` di PRD bila masih tertulis.
 
 ## Git commit
 
@@ -94,10 +77,3 @@ saat mengerjakan milestone. ID `FR-xx`/`AC-xx` konsisten antar dokumen.
 - Jaga commit tetap fokus satu perubahan logis (walking skeleton → recognizer →
   pipeline → tts → gui).
 - Jangan commit folder `models/`, `.venv/`, atau artefak demo.
-
-## Verifikasi minimal sebelum commit
-
-- Jalankan yang terpengaruh: `python app.py` atau `python scripts/check_env.py`.
-- Smoke: klik Start → status `Berjalan`; stream tampil di OBS.
-- Bila perubahan menyentuh overlay/TTS, ulangi checklist di
-  `docs/BUILD_ORDER.md`.
