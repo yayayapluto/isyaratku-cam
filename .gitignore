@@ -25,3 +25,4 @@ recordings/
 # espeak-ng lokal (extract MSI via msiexec /a; ~50MB, binary)
 tools/
 *.msi
+data/
