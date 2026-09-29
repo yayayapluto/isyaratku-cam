@@ -172,8 +172,13 @@ class Worker:
             cv2.rectangle(show, (int(min(xs)), int(min(ys))),
                           (int(max(xs)), int(max(ys))), (255, 0, 255), 2)
         crop_note = "-" if crop is None else f"{crop.shape[1]}x{crop.shape[0]}px"
+        # tts_error di atas hanya dari pemeriksaan sebelum loop. Kegagalan di
+        # tengah jalan (device hilang, synth rusak) dilaporkan lewat
+        # tts.last_error() — tanpa ini baris ini bisa bilang "aktif" padahal
+        # audionya mati.
         tts_note = "TTS: mati" if not self.enable_tts else (
-            f"TTS: error ({self.tts_error})" if self.tts_error else "TTS: aktif")
+            f"TTS: error ({self.tts_error or tts.last_error()})"
+            if (self.tts_error or tts.last_error()) else "TTS: aktif")
         line = (f"tangan: {'ya' if marks else 'tidak'} | "
                f"crop: {crop_note} | {tts_note}")
         (tw, _), _ = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
@@ -185,8 +190,10 @@ class Worker:
                       (255, 255, 255), -1)
         cv2.putText(show, line, (px, py), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                     (0, 0, 0), 2, cv2.LINE_AA)
-        # overlay huruf: posisi & gaya sama persis dengan yang dikirim ke vcam
-        draw_text(show, text, self.font_size)
+        # overlay huruf gaya sama dengan vcam, tapi ukurannya dibatasi:
+        # jendela debug 640x480, dan draw_text menskalakan tinggi baris dari
+        # font_size — 32px di situ menabrak tepi bawah.
+        draw_text(show, text, min(self.font_size, 18))
         cv2.imshow("IsyaratKu debug (tekan q untuk tutup jendela)", show)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             self.running = False

@@ -86,16 +86,27 @@ def speak_async(text: str) -> None:
         _queue.task_done()
     _queue.put(text)
 
+_last_error: str = ""   # kegagalan terakhir; dibaca worker untuk status debug
+
+
+def last_error() -> str:
+    """Pesan kegagalan TTS terakhir (kosong = sukses)."""
+    return _last_error
+
 
 def _tts_worker() -> None:
+    global _last_error
     while True:
         text = _queue.get()
         try:
             _emit(text)
+            _last_error = ""
         except Exception as exc:
             # Semua kegagalan dilaporkan: TTS yang mati tanpa pesan tak
-            # bisa dibedakan dari "tidak ada yang diucapkan".
-            print(f"TTS dilewati: {type(exc).__name__}: {exc}")
+            # bisa dibedakan dari "tidak ada yang diucapkan". Ditulis ke
+            # _last_error juga supaya jendela debug tak mengklaim "aktif".
+            _last_error = f"{type(exc).__name__}: {exc}"
+            print(f"TTS dilewati: {_last_error}")
         _queue.task_done()
 
 

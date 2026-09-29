@@ -108,7 +108,7 @@ class HealthChip(QLabel):
         self.setText(text)
         self.setStyleSheet(
             f"HealthChip {{ background: {color}; border-radius: 6px;"
-            f" padding: 4px 10px; font-size: 13pt; color: white; }}"
+            f" padding: 4px 10px; font-size: 10pt; color: white; }}"
         )
         # Klik (bukan hover) memperlihatkan langkah perbaikan untuk
         # kuning/merah — chip hijau tidak butuh langkah apa pun.
