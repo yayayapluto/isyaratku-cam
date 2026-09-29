@@ -97,12 +97,16 @@ tiap dataset diverifikasi manual.
   `scripts/build_dataset.py` yang sudah dijalankan.
 - Dedupe crop lintas-sumber oleh MD5 piksel hasil crop (bukan MD5 berkas
   mentah): kemunculan pertama menang, duplikat dilewati dan dihitung di baris
-  `dilewati` sumber tersebut. Diverifikasi deterministik: build dua kali →
-  MD5 pohon output identik.
+  `dilewati` sumber tersebut. Determinisme terikat ke perintah digest di bawah
+  ini: build ulang menghasilkan nilai yang sama.
   Resep digest (dijalankan dari akar repo, deterministik pada
-  `data/finetune` setelah build): `cd data/finetune && find . -type f \( -name
-  '*.jpg' \) -printf '%P\n' | sort | xargs -I{} sh -c 'md5sum "{}"' | awk
-  '{print $1}' | md5sum` → **`87efbd61ebda5d82625d8d7b4aa75515`**, diukur ulang
+  `data/finetune` setelah build):
+
+  ```bash
+  cd data/finetune && find . -type f \( -name '*.jpg' \) -printf '%P\n' | sort | xargs -I{} sh -c 'md5sum "{}"' | awk '{print $1}' | md5sum
+  ```
+
+  → **`87efbd61ebda5d82625d8d7b4aa75515`**, diukur ulang
   identik setelah build kedua; cakupan **1.703 berkas `.jpg`** (1.362 train +
   341 val). Nilai itu hanya berlaku untuk resep di atas dan untuk sumber &
   konfigurasi split saat ini (4 sumber sama, `--val-split 0.2 --seed 42`);
