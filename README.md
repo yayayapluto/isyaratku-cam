@@ -19,9 +19,14 @@ webcam → MediaPipe Hands (num_hands=2) → crop bbox +20px → letterbox perse
 ```
 
 Kalimat diucapkan **setelah tangan hilang 3 detik** (TECH_SPEC §4.5) — menahan
-satu isyarat tidak membuat kata terpotong di tengah.
-Hasil pengukuran akurasi A–Z: **belum ada** (`docs/results_m2.json` belum dibuat),
-lihat [Pengukuran akurasi (M2)](#pengukuran-akurasi-m2).
+satu isyarat tidak membuat kata terpotong di mid-word.
+
+**Sebelum menjalankan aplikasi, nyalakan OBS Virtual Camera**
+(OBS → *Controls → Start Virtual Camera*). Kalau belum, worker membatalkan
+sendiri dan menampilkan pesan ini — bukan error misterius.
+
+Hasil pengukuran akurasi A–Z: **belum ada** (`docs/results_m2.json` belum
+dibuat), lihat [Pengukuran akurasi (M2)](#pengukuran-akurasi-m2).
 
 ## Setup
 
@@ -45,10 +50,13 @@ python main.py                    # Start / Stop + slider ukuran font overlay
 ## Pakai aplikasi
 
 1. `python main.py` → **MULAI**.
-2. Isyaratkan huruf satu per satu; jeda/rupanya huruf baru cukup untuk menambah huruf.
-3. Turunkan tangan dan tunggu 3 detik → kata diucapkan (Zoom/Meet memakainya
+2. Isyaratkan huruf satu per satu; pause pendek cukup untuk menambah huruf.
+3. Turunkan tangan, tunggu 3 detik → kata diucapkan (Zoom/Meet memakainya
    sebagai mikrofon) dan overlay bersih untuk kata berikutnya.
 4. Slider mengatur ukuran font overlay (10–32, langsung berlaku saat jalan).
+5. **Mode debug** (opsional): centang "Mode debug" sebelum MULAI → jendela CCTV
+   muncul, berisi bbox magenta, landmark kuning, ukuran crop, dan teks overlay.
+   `q` menutup jendela dan menghentikan worker. Demo normal: biarkan kosong.
 
 Di Zoom/Meet: kamera = **"OBS Virtual Camera"**, mikrofon = **"CABLE Output"**.
 Tes lewat self-view Zoom/Meet.
