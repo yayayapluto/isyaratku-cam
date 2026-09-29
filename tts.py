@@ -6,11 +6,10 @@ entri ganda untuk perangkat yang sama.
 """
 
 from __future__ import annotations
-
 import os
+import queue
 import shutil
 import threading
-from typing import Optional
 
 import numpy as np
 
@@ -69,8 +68,37 @@ def cable_output_device() -> int:
     return best
 
 
-def speak(text: str) -> None:
-    """Ucapkan teks. Dipanggil dari thread kerja, non-blocking terhadap GUI."""
+_queue: Optional["queue.Queue[str]"] = None
+
+
+def speak_async(text: str) -> None:
+    """Antre ucapan; thread daemon memulainya. Tidak pernah menahan loop video:
+    worker video tetap mengirim frame selagi audio diputar terpisah."""
+    global _queue
+    if _queue is None:
+        _queue = queue.Queue()
+        threading.Thread(target=_tts_worker, daemon=True,
+                         name="isyaratku-tts").start()
+    # ponytail: backlog maks 2 — Piper lebih lambat dari laju kata, dan suara
+    # tertunda tak berguna kalau isyarat sudah berlanjut.
+    while _queue.qsize() > 2:
+        _queue.get_nowait()
+        _queue.task_done()
+    _queue.put(text)
+
+
+def _tts_worker() -> None:
+    while True:
+        text = _queue.get()
+        try:
+            _emit(text)
+        except TtsUnavailable as exc:
+            print(f"TTS dilewati: {exc}")
+        _queue.task_done()
+
+
+def _emit(text: str) -> None:
+    """Ucapkan teks, blocking (thread khusus TTS, bukan thread video)."""
     text = text.strip()
     if not text:
         return
@@ -99,6 +127,16 @@ def speak(text: str) -> None:
         samplerate=dst_rate, device=device, blocking=True,
     )
 
+
+def speak(text: str) -> None:
+    """Blocking — untuk skrip verifikasi (verify_m5) yang memanggil langsung."""
+    _emit(text)
+
+
+def drain() -> None:
+    """Tunggu semua antrean selesai (dipakai BERHENTI di GUI)."""
+    if _queue is not None:
+        _queue.join()
 
 if __name__ == "__main__":
     try:

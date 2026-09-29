@@ -54,28 +54,53 @@ def open_webcam() -> tuple[cv2.VideoCapture, int, int]:
     return cap, w, h
 
 
+def _wrap_lines(text: str, max_w: int, scale: float, thick: int) -> list[str]:
+    """Potong teks jadi baris selebar max_w (greedy, per kata)."""
+    lines: list[str] = []
+    for para in text.split("\n"):
+        cur = ""
+        for word in para.split():
+            cand = f"{cur} {word}".strip()
+            tw, _ = cv2.getTextSize(cand, cv2.FONT_HERSHEY_SIMPLEX, scale,
+                                   thick)[0]
+            if cur and tw > max_w:
+                lines.append(cur)
+                cur = word
+            else:
+                cur = cand
+        lines.append(cur)
+    return [ln for ln in lines if ln]
+
+
 def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
-    """Subtitle gaya film: teks putih + halo hitam tipis, terpusat.
+    """Subtitle: teks putih + halo hitam tipis, wrap baris, bergantung bawah.
 
     Sesuai referensi: tanpa band gelap, teks langsung di atas gambar.
     OpenCV 5 membatasi ketebalan stroke putText (th 10 == th 3), jadi halo
     dibuat lewat mask + dilate — bukan stroke lebih tebal."""
-    if not text:
+    if not text.strip():
         return frame
     h, w = frame.shape[:2]
     scale = font_size / 20.0
     thick = max(1, int(round(font_size / 7)))
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
-    x = max(10, (w - tw) // 2)
-    y = max(th + 8, h - int(h * 0.08))
+
+    lines = _wrap_lines(text, w - 20, scale, thick)
+    mask = np.zeros((h, w), np.uint8)
+    (_, th), _ = cv2.getTextSize("Ag", cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+    step = int(th * 1.45)
+    base_y = max(th + 8, h - int(h * 0.08))
+    for i, line in enumerate(reversed(lines)):
+        y = base_y - i * step
+        if y < th + 8:
+            break  # ruang habis: kalimat sangat panjang, baris atas dipotong
+        x = max(10, (w - cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX,
+                                        scale, thick)[0][0]) // 2)
+        cv2.putText(mask, line, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
+                    255, thick, cv2.LINE_AA)
 
     # mask teks -> dilate = halo, tempel hitam di bawah glyph putih
-    mask = np.zeros((h, w), np.uint8)
-    cv2.putText(mask, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                255, thick, cv2.LINE_AA)
     halo = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=1)
-    halo_region = halo > 0
-    frame[halo_region] = (0, 0, 0)
+    frame[halo > 0] = (0, 0, 0)
     frame[mask > 0] = (255, 255, 255)
     return frame
 
@@ -144,7 +169,9 @@ class Worker:
         except FileNotFoundError as exc:
             raise RuntimeError(f"model belum diunduh: {exc}") from exc
 
-        speak = tts.speak if self.enable_tts else None
+        # speak_async: antre + thread daemon. Blocking sd.play di loop video
+        # akan menghentikan cap.read() selama durasi audio tiap kata.
+        speak = tts.speak_async if self.enable_tts else None
         if self.enable_tts:
             try:
                 tts.cable_output_device()
@@ -186,6 +213,11 @@ class Worker:
                 if marks is None:
                     self._pipeline.clear_hand()   # tangan hilang -> timer absen
                     smoother.reset()
+                    # tick() WAJIB di cabang ini: tanpa ini timer absen tak
+                    # pernah jalan (tangan hilang tak menghasilkan huruf)
+                    done = self._pipeline.tick()
+                    if done:
+                        self._status(done)
                     self._preview(frame, None, self._pipeline.text)
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
@@ -194,9 +226,15 @@ class Worker:
                     continue
 
                 self.hand_frames += 1
+                # tangan ADA di frame -> jangan jalankan timer absen walau model
+                # belum memberi huruf baru (tanpa ini kata tak pernah selesai)
+                self._pipeline.mark_present()
                 cropped = crop_hand(frame, marks)
                 self._preview(frame, marks, self._pipeline.text, cropped)
                 if cropped is None:   # tangan terlalu jauh/kecil: skip prediksi
+                    done = self._pipeline.tick()   # tetap jalankan timer absen
+                    if done:
+                        self._status(done)
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
                     cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -228,6 +266,8 @@ class Worker:
             cam.close()
             if self.debug:
                 cv2.destroyAllWindows()
+            if self.enable_tts and self.tts_error is None:
+                tts.drain()   # jangan potong kata terakhir saat BERHENTI
             self.running = False
 
 

@@ -41,9 +41,15 @@ class TextPipeline:
     def add_letter(self, letter: str) -> None:
         """Panggil tiap kali model memberi huruf stabil."""
         if letter == self.prev_letter:
-            return  # huruf sama ditahan sekali saja (satu ketukan = satu huruf)
+            return  # satu ketukan = satu huruf
         self.word += letter
         self.prev_letter = letter
+        self._last_new = self._now()
+        self.mark_present()
+
+    def mark_present(self) -> None:
+        """Panggil TIAP frame tangan ADA di frame, walau tak ada huruf baru —
+        cegah timer absen jalan hanya karena tidak ada huruf baru."""
         self._hand_present = True
         self._hand_absent_since = None
 
