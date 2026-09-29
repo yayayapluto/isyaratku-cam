@@ -156,9 +156,11 @@ target produk, **bukan** hasil terukur.
 angka terukur di repo ini: `docs/MODEL_SELECTION.md` §3/§4. Jangan pakai
 angka lain; jangan hitung ulang di dokumen ini.** Angka ini datang dari
 jalur crop bbox VOC sintetis (`eval_offline.py` menyusun landmark dari sudut
-bbox), jadi **tidak langsung setara** dengan metrik fine-tune apa pun di
-`data/finetune/val` (crop dari deteksi MediaPipe nyata + PADDING=10 — asal
-crop beda, lihat §10).
+bbox), jadi **tidak langsung setara** dengan metrik fine-tune yang dihitung
+atas SELURUH `data/finetune/val` (1.189 dari 1.703 crop memakai deteksi
+MediaPipe nyata) — kecuali subset val rhio-saja, yang memakai jalur
+sintetis bbox yang identik dan karena itu **langsung setara** dengannya
+(§5 item 1).
 
 Gate fine-tuning (keduanya wajib, urut):
 
