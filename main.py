@@ -38,7 +38,7 @@ class WorkerThread(QThread):
     def run(self) -> None:
         try:
             self._worker.run()
-        except RuntimeError as exc:
+        except Exception as exc:  # FileNotFoundError dsb., bukan hanya RuntimeError
             self.error.emit(str(exc))
 
     def stop(self) -> None:

@@ -52,12 +52,19 @@ def open_webcam() -> cv2.VideoCapture:
 
 
 def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
-    if text:
-        # skala 1.0 ~ 22pt; header dibuat mengikuti ukuran font terpilih
-        header = max(90, font_size * 2 + 45)
-        cv2.rectangle(frame, (0, 0), (WIDTH, header), (20, 20, 20), -1)
-        cv2.putText(frame, text, (20, int(header * 0.7)), cv2.FONT_HERSHEY_SIMPLEX,
-                    font_size / 20.0, (0, 255, 0), 3, cv2.LINE_AA)
+    """Posisi subtitle film: strip gelap di bawah, teks hijau di tengahnya."""
+    if not text:
+        return frame
+    h = frame.shape[0]
+    scale = font_size / 20.0
+    thick = max(2, int(round(font_size / 7)))
+    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+    band = max(60, int(th * 2.2))
+    y0 = h - band
+    cv2.rectangle(frame, (0, y0), (frame.shape[1], h), (15, 15, 15), -1)
+    x = max(10, (frame.shape[1] - tw) // 2)
+    cv2.putText(frame, text, (x, h - int(band * 0.32)),
+                cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 255, 0), thick, cv2.LINE_AA)
     return frame
 
 
@@ -103,8 +110,9 @@ class Worker:
                           (int(max(xs)), int(max(ys))), (255, 0, 255), 2)
         crop_note = "-" if crop is None else f"{crop.shape[1]}x{crop.shape[0]}px"
         cv2.putText(show, f"tangan: {'ya' if marks else 'tidak'} | "
-                          f"crop: {crop_note} | huruf: {text}", (10, 24),
+                          f"crop: {crop_note}", (10, 24),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        # overlay huruf: posisi & gaya sama persis dengan yang dikirim ke vcam
         draw_text(show, text, self.font_size)
         cv2.imshow("IsyaratKu debug (tekan q untuk tutup jendela)", show)
         if cv2.waitKey(1) & 0xFF == ord("q"):

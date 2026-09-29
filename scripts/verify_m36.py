@@ -47,6 +47,8 @@ def main() -> int:
         time.sleep(0.1)
 
     if errors:
+        w.stop()  # lepas webcam + kamera virtual sebelum keluar
+        t.join(timeout=8)
         print(f"GAGAL worker exception: {errors[-1]}")
         return 1
 

@@ -13,11 +13,37 @@ import time
 import cv2
 import numpy as np
 
-WORKER = subprocess.Popen([sys.executable, "worker.py"], cwd=".")
+def _spawn_worker() -> subprocess.Popen:
+    """Jalankan worker dengan kata overlay dipaksa non-kosong.
+
+    Tanpa tangan, `word` kosong dan overlay memang tidak digambar. Properti
+    `text` dipaksa mengembalikan kata uji, kalau tidak gate selalu baca 0."""
+    code = (
+        "import text_pipeline;"
+        "text_pipeline.TextPipeline.text = property(lambda self: 'HALO');"
+        "import worker;"
+        "worker.Worker(on_status=None, enable_tts=False).run()"
+    )
+    return subprocess.Popen([sys.executable, "-c", code], cwd=".")
 
 
-def find_virtual_device() -> tuple[int, int]:
-    """Cari device non-webcam (indeks > 0) yang bisa dibaca."""
+WORKER = _spawn_worker()
+
+
+def green_subtitle_pixels(frame: np.ndarray) -> int:
+    """Jumlah pixel teks subtitle hijau di strip bawah frame.
+
+    Mask dominan hijau (bukan >150 absolut) supaya tahan anti-aliasing di
+    atas latar webcam."""
+    footer = frame[-140:]
+    return int(
+        ((footer[:, :, 1].astype(int) - footer[:, :, 0].astype(int) > 40) &
+         (footer[:, :, 1].astype(int) - footer[:, :, 2].astype(int) > 40)).sum()
+    )
+
+
+def find_virtual_device() -> tuple[int, np.ndarray]:
+    """Device yang benar-benar memuat overlay, bukan sekadar bisa dibaca."""
     for idx in range(1, 7):
         cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
         if not cap.isOpened():
@@ -25,14 +51,24 @@ def find_virtual_device() -> tuple[int, int]:
             continue
         ok, frame = cap.read()
         cap.release()
-        if ok and frame is not None:
-            return idx, frame.shape[1], frame.shape[0]
-    raise RuntimeError("device virtual tidak ditemukan")
+        if ok and frame is not None and green_subtitle_pixels(frame) > 50:
+            return idx, frame
+    raise RuntimeError("device virtual dengan overlay tidak ditemukan")
 
 
 try:
-    time.sleep(4)  # tunggu worker mulai streaming
-    device, w, h = find_virtual_device()
+    # torch + mediapipe + webcam perlu waktu; coba berapa kali sampai streaming
+    deadline = time.time() + 90
+    device, first = None, None
+    while time.time() < deadline:
+        try:
+            device, first = find_virtual_device()
+            break
+        except RuntimeError:
+            time.sleep(2)
+    if device is None:
+        raise RuntimeError("device virtual tidak mulai streaming dalam 90 detik")
+    h, w = first.shape[:2]
     print(f"device virtual: index={device} ukuran={w}x{h}")
 
     cap = cv2.VideoCapture(device, cv2.CAP_DSHOW)
@@ -48,14 +84,12 @@ try:
     if best is None:
         raise RuntimeError("tidak bisa membaca frame dari device virtual")
 
-    # header frame: strip 70px atas ditutup rectangle gelap + teks hijau
-    header = best[:70]
-    green = int(
-        ((header[:, :, 1] > 150) & (header[:, :, 0] < 120) & (header[:, :, 2] < 120)).sum()
-    )
-    print(f"pixel hijau di header: {green}")
-    assert green > 500, "teks overlay hijau tidak terdeteksi"
-    print("M1 OK: stream virtual memuat overlay teks")
+    green = green_subtitle_pixels(best)
+    # ambang skala lebar frame: 640x480 mengukur ~414, 1280x720 ~900+
+    threshold = max(50, int(best.shape[1] * 0.4))
+    print(f"pixel hijau di area subtitle: {green} (ambang {threshold})")
+    assert green > threshold, "teks subtitle hijau tidak terdeteksi"
+    print("M1 OK: stream virtual memuat subtitle film di bawah frame")
 finally:
     WORKER.terminate()
     try:
