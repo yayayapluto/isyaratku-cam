@@ -49,7 +49,7 @@ satu kata — jeda antar-huruf lebih dari itu akan memecah kata.
 | `hand_detect.py` | `HandDetector` (MediaPipe Tasks, `num_hands=2`, singleton modul) dan `crop_hand()` (bbox + padding 20px, letterbox ke persegi). |
 | `recognizer.py` | `build_model()` memuat bobot EfficientNet-B3 + urutan label; `preprocess()` normalisasi 224×224; `Smoother()` kebijakan 4-dari-5. |
 | `text_pipeline.py` | Buffer huruf → kata → kalimat; `tick()` memicu TTS per kata (tangan absen ≥ 1,2 dtk) dan membersihkan buffer saat kalimat selesai (≥ 3 dtk). `mark_present()` dipanggil tiap frame tangan ada agar timer absen tidak salah jalan. |
-| `tts.py` | Piper ONNX → VB-Cable "CABLE Input" (WASAPI 48 kHz), resample 22050→48000. `speak_async()` antre + thread daemon (backlog maks 2) supaya audio tidak menghentikan loop video; `drain()` tunggu kata terakhir saat BERHENTI. |
+| `tts.py` | Piper ONNX → VB-Cable "CABLE Input" (WASAPI 48 kHz), resample 22050→48000. `speak_async()` antre tanpa memotong backlog + thread daemon (COM diinisialisasi supaya WASAPI mau memutar audio) supaya audio tidak menghentikan loop video; `drain()` tunggu kata terakhir saat BERHENTI. |
 | `scripts/` | verifikasi & tooling, lihat bawah. |
 
 Rincian pipeline: [`docs/TECH_SPEC.md`](docs/TECH_SPEC.md). Pilihan model + semua
