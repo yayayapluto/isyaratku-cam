@@ -114,9 +114,10 @@ Max ~600 baris kode inti; kandidat rujukan sebelum menulis kode baru:
    jika ≥ 4 dari 5 identik. Mencegah jitter sajian demo.
 4. **Huruf→kata**: saat label stabil dan berbeda dari label terakhir yang
    diterima → append ke `current_word`, reset `hand_absent_timer`.
-5. **Kalimat otomatis**: `hand_absent_timer` ≥ 3 detik tanpa tangan →
-   `speak(current_sentence)` via Piper, lalu `current_word`/sentence kosong
-   dan overlay bersih.
+5. **Kalimat otomatis**: 3 detik tanpa huruf BARU (bukan tanpa tangan) →
+   `speak(current_word)` via Piper, lalu buffer dibersihkan dan overlay bersih.
+   Tangan hilang = reset `prev_letter` + smoothing, supaya huruf pertama
+   kata berikutnya tidak tertahan.
 6. Overlay digambar pada frame yang dikirim ke `pyvirtualcam`.
 
 Pseudo:
@@ -126,21 +127,23 @@ stable = deque(maxlen=5)
 on label:
     stable.append(label)
     if len(stable) < 5 or stable.count(label) < 4: return
-    if label == last_letter: return          # hindari spam huruf sama
+    if label == last_letter: return          # satu ketukan = satu huruf
     last_letter = label
     word += label
-    hand_absent_timer = now
+    last_new = now
 
-on no_hand:
-    if word and now - hand_absent_timer > 3.0:
-        tts.speak(sentence + word); word = ""
+tick():  # tiap frame
+    if no_hand:
+        last_letter = None; stable.clear()   # huruf pertama kata berikutnya bebas
+    if word and now - last_new >= 3.0:
+        tts.speak(word); word = ""
 ```
 
 ## 5. Integrasi Kamera Virtual + Audio Virtual + Piper
 
-**Kamera virtual.** Windows backend **Unity Capture** wajib terpasang agar
-stream muncul di OBS. OBS Virtual Camera hanya untuk percobaan di Zoom/Meet
-(satu instance, tidak bisa ditangkap ulang OBS).
+**Kamera virtual.** Output utama = **OBS Virtual Camera** (dipakai Zoom/Meet),
+diikuti Unity Capture bila OBS tidak jalan (`BACKEND_ORDER = ("obs",
+"unitycapture")`). Uji video lewat self-view Zoom/Meet, bukan OBS.
 
 ```python
 import pyvirtualcam
