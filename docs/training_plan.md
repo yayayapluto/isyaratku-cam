@@ -124,11 +124,16 @@ python scripts/build_dataset.py \
 1. Validasi `data/finetune/val`: metrik otomatis saat ini hanya `val_acc`
    dari `scripts/train_finetune.py` (per epoch, tercetak ke stdout) —
    confusion matrix 26×26 per huruf **belum ada skripnya** (gap, lihat §10).
-   Catatan: `val_acc` pada `data/finetune/val` **tidak setara** dengan
-   baseline 68,65% — angka itu berasal dari crop landmark bbox VOC sintetis
-   (`eval_offline.py`), sementara crop sumber folder dibuat dari deteksi
-   MediaPipe nyata (`build_dataset.py`); angka 68,65% hanya berlaku sebagai
-   pembanding untuk holdout webcam (G2).
+   Catatan: `val_acc` pada `data/finetune/val` penuh **tidak setara**
+   dengan baseline 68,65% — 1.189 dari 1.703 crop (alfredo 570 +
+   meisyavira 619) berasal dari deteksi MediaPipe nyata
+   (`build_dataset.py`, `read_folders_source` → landmark None), sedangkan
+   baseline memakai landmark sintetis dari sudut bbox VOC. Namun subset
+   rhio-saja dari val (514 crop → 103 crop val ter-split) memakai jalur
+   crop sintetis bbox yang IDENTIK dengan `eval_offline.py`, jadi subset itu
+   **setara langsung** dengan 68,65% dan boleh dipakai sebagai gate regresi
+   G1; untuk bisa dipakai, subset itu harus diekstrak dulu (belum ada
+   skripnya).
 2. **Gate akhir: `python scripts/test_letters.py` di webcam** (kamera &
    cahaya sama dengan skenario a). Fine-tune hanya mengganti
    `models/bisindo_alphabet/` bila **mengalahkan 68,65%** pada holdout
@@ -160,7 +165,7 @@ Gate fine-tuning (keduanya wajib, urut):
 | # | Gate | Target | Status |
 |---|---|---|---|
 | G1 | `scripts/eval_offline.py` pada VOC rhio (`DATA_DIR` hardcoded ke `data/bisindo_rhio`, hanya baca `{train,test}`) | tetap **68,65%** sebagai cek regresi saja (turun berarti lingkungan rusak) — baseline ini diukur lewat jalur crop bbox VOC sintetis, jadi **tidak setara** dengan metrik fine-tune di `data/finetune/val` | baseline saja; belum dijalankan ulang pasca-rebuild |
-| G2 | `scripts/test_letters.py` di webcam → `docs/results_m2.json` | **> 68,65%** pada holdout webcam yang sama dengan skenario a, menuju target 85%; A/B baseline vs bobot fine-tune wajib lewat jalur crop yang sama — tanpa skrip eval folder-crop untuk `data/finetune/val`, A/B yang valid hari ini hanya uji webcam ini (`val_loss`/`val_acc` `train_finetune.py` tetap internal latih, sudah jenuh pada 12 citra/huruf, bukan akurasi produk) | **belum ada berkasnya — wajib dibuat dulu; jumlahnya tidak boleh dikarang** |
+| G2 | `scripts/test_letters.py` di webcam → `docs/results_m2.json` | **> 68,65%** pada holdout webcam yang sama dengan skenario a, menuju target 85%; A/B baseline vs bobot fine-tune wajib lewat jalur crop yang sama — tanpa skrip eval folder-crop untuk `data/finetune/val`, A/B yang valid hari ini hanya uji webcam ini (`val_loss`/`val_acc` `train_finetune.py` tetap internal latih, belum terverifikasi pada data penuh) | **belum ada berkasnya — wajib dibuat dulu; jumlahnya tidak boleh dikarang** |
 
 ## 6. Risiko
 
