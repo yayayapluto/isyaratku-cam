@@ -1,0 +1,16 @@
+{
+  "dataset": "data/bisindo_rhio train+test, crop bbox VOC + padding 20 (sama dengan input model saat demo)",
+  "per_mode": {
+    "asli": {
+      "benar": 309,
+      "total": 520,
+      "akurasi": 0.5942
+    },
+    "flip": {
+      "benar": 285,
+      "total": 520,
+      "akurasi": 0.5481
+    }
+  },
+  "delta_akurasi": 0.0461
+}

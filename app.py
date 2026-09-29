@@ -54,7 +54,6 @@ STATE_ERROR = "error"
 # jadi warna latar & teks dipasang eksplisit di sini — putih terjamin terang.
 PAGE_QSS = """
 QWidget#PageRoot { background-color: #202020; }
-QWidget#PageRoot QLabel { color: #FFFFFF; }
 """
 
 PLACEHOLDER = "Tunjukkan isyarat huruf ke kamera"
@@ -75,11 +74,11 @@ CAM_FIX = (
     "sebagai Administrator, lalu restart aplikasi. Cadangan: pasang OBS."
 )
 STATE_TEXT = {
-    STATE_STOPPED: ("Berhenti", "#8C8C8C"),
+    STATE_STOPPED: ("Berhenti", "#B8BEC6"),
     STATE_PREPARING: ("Menyiapkan", "#4FA3E3"),
-    STATE_RUNNING: ("Berjalan", "#189152"),
+    STATE_RUNNING: ("Berjalan", "#3FBF7F"),
 }
-ERROR_TEXT = ("Terjadi masalah", "#C62C30")
+ERROR_TEXT = ("Terjadi masalah", "#FF6B6B")
 
 
 class HealthChip(QLabel):
@@ -180,6 +179,44 @@ class WorkerThread(QThread):
         self.font_size = size
 
 
+CARD_BG = QColor(0x2A, 0x2A, 0x2A)   # latar card gelap (halaman gelap)
+
+
+_TINT_MARK = "/*tint*/"
+
+
+def tint(label: QWidget, color: str) -> None:
+    """Tambahkan warna teks, JANGAN ganti stylesheet milik widget.
+
+    Widget Fluent memasang QSS sendiri (FluentLabelBase{color:black} +
+    pengaturan font). setStyleSheet("color: ...") menimpa SELURUH sheet itu —
+    font ikut hilang. Append satu aturan saja; aturan terakhir yang menang,
+    jadi warna harus diletakkan di akhir sheet widget itu sendiri.
+    """
+    cls = type(label).__name__          # selectornya kelas widget itu sendiri
+    sheet = label.styleSheet()
+    if _TINT_MARK in sheet:   # ganti warna tanpa numpuk aturan
+        head = sheet.split(_TINT_MARK)[0]
+        label.setStyleSheet(head + f"{_TINT_MARK}{cls} {{ color: {color}; }}")
+    else:
+        label.setStyleSheet(
+            sheet + f"\n{_TINT_MARK}{cls} {{ color: {color}; }}")
+
+
+def dark_card(card: QWidget) -> QWidget:
+    """Paksa card jadi gelap.
+
+    Card melukis latar di paintEvent() dari BackgroundColorObject, BUKAN dari
+    QSS — jadi aturan halaman maupun setTheme tak pernah mengubahnya (terukur:
+    CardWidget tetap #f0f0f0 walau isDarkTheme()==True). Menimpa warna di
+    sumbernya; tanpa ini teks putih tak terbaca di card terang.
+    """
+    for child in card.children():
+        if type(child).__name__ == "BackgroundColorObject":
+            child.backgroundColor = CARD_BG
+    return card
+
+
 class MainWindow(QWidget):
     """Satu halaman tunggal. State mesin: Berhenti/Menyiapkan/Berjalan/Error."""
 
@@ -206,7 +243,7 @@ class MainWindow(QWidget):
 
         head = QHBoxLayout()
         self.title_label = TitleLabel("IsyaratKu Cam", self)
-        self.title_label.setStyleSheet("color: #FFFFFF;")
+        tint(self.title_label, "#FFFFFF")
         self.pin_button = ToolButton(FluentIcon.PIN, self)
         self.pin_button.setCheckable(True)
         self.pin_button.setToolTip("Selalu di atas")
@@ -218,7 +255,7 @@ class MainWindow(QWidget):
 
         size_row = QHBoxLayout()
         size_label = BodyLabel("Ukuran", self)
-        size_label.setStyleSheet("color: #FFFFFF;")
+        tint(size_label, "#FFFFFF")
         self.size_seg = SegmentedWidget(self)
         for key in ("S", "M", "L"):
             self.size_seg.insertItem(
@@ -256,7 +293,7 @@ class MainWindow(QWidget):
         badge_row.addStretch(1)
         root.addLayout(badge_row)
 
-        self.text_card = SimpleCardWidget(self)
+        self.text_card = dark_card(SimpleCardWidget(self))
         card_box = QVBoxLayout(self.text_card)
         card_box.setContentsMargins(18, 18, 18, 18)
         card_box.setSpacing(6)
@@ -264,24 +301,31 @@ class MainWindow(QWidget):
         self.text_label.setWordWrap(True)
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.text_label.setMinimumHeight(150)
-        self.text_label.setStyleSheet("color: #9099A6; font-weight: 600;")
+        tint(self.text_label, "#9099A6")
         self.text_label.setFont(QFont("", self._display_size()))
         card_box.addWidget(self.text_label)
         self.candidate_label = CaptionLabel(
             "Tunjukkan isyarat huruf ke kamera", self.text_card
         )
         self.candidate_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.candidate_label.setStyleSheet("color: #9AA3AE;")
+        tint(self.candidate_label, "#9AA3AE")
         card_box.addWidget(self.candidate_label)
         root.addWidget(self.text_card, 1)
 
-        recent = CardWidget(self)
+        recent = dark_card(CardWidget(self))
         recent_box = QVBoxLayout(recent)
         recent_box.setContentsMargins(14, 12, 14, 12)
         recent_box.setSpacing(4)
-        recent_head = SubtitleLabel("Diucapkan terakhir", self)
+        recent_head = SubtitleLabel("Diucapkan terakhir", recent)
+        # SubtitleLabel juga punya QSS sendiri (color: black).
+        tint(recent_head, "#FFFFFF")
         recent_box.addWidget(recent_head)
-        self.recent_labels = [CaptionLabel("—", recent) for _ in range(3)]
+        self.recent_labels = [
+            CaptionLabel("—", recent) for _ in range(3)
+        ]
+        for row in self.recent_labels:
+            # CaptionLabel punya QSS sendiri (color: black): timpa langsung.
+            tint(row, "#E8EAED")
         for row in self.recent_labels:
             row.setWordWrap(True)
             recent_box.addWidget(row)
@@ -297,15 +341,17 @@ class MainWindow(QWidget):
         chips.addStretch(1)
         root.addLayout(chips)
 
-        self.error_card = CardWidget(self)
+        self.error_card = dark_card(CardWidget(self))
         error_box = QVBoxLayout(self.error_card)
         error_box.setContentsMargins(14, 12, 14, 12)
         error_box.setSpacing(6)
         self.error_label = StrongBodyLabel("Error", self.error_card)
-        self.error_label.setStyleSheet("color: #FF6B6B;")
+
+        tint(self.error_label, "#FF6B6B")
         error_box.addWidget(self.error_label)
         self.error_text = CaptionLabel("", self.error_card)
         self.error_text.setWordWrap(True)
+        tint(self.error_text, "#E8EAED")
         error_box.addWidget(self.error_text)
         self.retry_button = PrimaryPushButton("Coba lagi", self.error_card)
         self.retry_button.clicked.connect(self.start_worker)
@@ -323,7 +369,7 @@ class MainWindow(QWidget):
             "Kamera virtual dipakai: ditampilkan setelah Mulai.", self
         )
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet("color: #9AA3AE;")
+        tint(hint, "#9AA3AE")
         root.addWidget(hint)
         self.hint_label = hint
 
@@ -332,7 +378,7 @@ class MainWindow(QWidget):
         self.state = state
         text, color = STATE_TEXT.get(state, ERROR_TEXT)
         self.state_label.setText(text)
-        self.state_label.setStyleSheet(f"color: {color};")
+        tint(self.state_label, color)
         self.spinner.setVisible(state == STATE_PREPARING)
         if state == STATE_STOPPED or state == STATE_ERROR:
             self.start_button.setText("MULAI")
@@ -348,7 +394,7 @@ class MainWindow(QWidget):
             self.error_card.hide()
         if state == STATE_STOPPED:
             self.text_label.setText(PLACEHOLDER)
-            self.text_label.setStyleSheet("color: #9099A6; font-weight: 600;")
+            tint(self.text_label, "#9099A6")
         if state != STATE_PREPARING and state != STATE_RUNNING:
             self.candidate_label.setText("Tunjukkan isyarat huruf ke kamera")
 
@@ -363,7 +409,7 @@ class MainWindow(QWidget):
             return
         self.error_card.hide()
         self.text_label.setText(PLACEHOLDER)
-        self.text_label.setStyleSheet("color: #9099A6; font-weight: 600;")
+        tint(self.text_label, "#9099A6")
         self._apply_state(STATE_PREPARING)
         self.text_label.setFont(QFont("", self._display_size()))
         self.thread = WorkerThread(
@@ -405,7 +451,7 @@ class MainWindow(QWidget):
         if not text:
             return
         self.text_label.setText(text)
-        self.text_label.setStyleSheet("color: #FFFFFF;")
+        tint(self.text_label, "#FFFFFF")
 
     def on_candidate(self, letter: str) -> None:
         if letter:
@@ -499,6 +545,11 @@ def main() -> None:
     args = parser.parse_args()
 
     app = QApplication(sys.argv)  # Qt mengabaikan --debug argparse
+    # Card melukis latar lewat paintEvent/isDarkTheme() — BUKAN QSS, jadi
+    # aturan halaman tak pernah mengubahnya. setTheme(save=False) memindahkan
+    # isDarkTheme()->True sehingga card jadi gelap; save=False tak menulis
+    # config ke disk user.
+    setTheme(Theme.DARK)
     window = MainWindow(debug=args.debug)
     window.show()
     sys.exit(app.exec())
