@@ -15,10 +15,14 @@ import threading
 
 import numpy as np
 
+import logs
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(ROOT, "models", "voices")
 VOICE = "id_ID-news_tts-medium"
 CABLE_HINT = "CABLE"
+
+_log = logs.get_logger()
 
 _voice = None
 _lock = threading.Lock()
@@ -26,7 +30,6 @@ _lock = threading.Lock()
 
 class TtsUnavailable(RuntimeError):
     """Device/model/espeak tidak siap."""
-
 
 
 def _com_init() -> None:
@@ -41,7 +44,10 @@ def _com_init() -> None:
 
         ctypes.windll.ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
     except Exception as exc:  # TTS jangan mati karena ini
-        print(f"[tts] CoInitializeEx dilewati: {type(exc).__name__}: {exc}")
+        _log.warning("CoInitializeEx dilewati: %s: %s",
+                     type(exc).__name__, exc)
+
+
 def _ensure_espeak() -> None:
     """Cari espeak-ng: PATH dulu, lalu kopi lokal tools/espeak-ng/ (extract MSI)."""
     if shutil.which("espeak-ng"):
@@ -62,57 +68,61 @@ def _load_voice():
     _ensure_espeak()
     onnx = os.path.join(MODEL_DIR, f"{VOICE}.onnx")
     if not os.path.exists(onnx):
-        raise TtsUnavailable(f"voice tidak ditemukan: {onnx}")
+        raise TtsUnavailable(f"voice tidak ada: {onnx}")
+    if not os.path.exists(onnx + ".json"):
+        raise TtsUnavailable(f"konfigurasi voice tidak ada: {onnx}.json")
     return piper.PiperVoice.load(onnx)
 
 
 def cable_output_device() -> int:
     """Indeks sounddevice untuk playback ke VB-Cable (CABLE Input)."""
-    import sounddevice as sd
+    import sounddevice as sd  # import lokal; berat
 
-    api_names = [a["name"] for a in sd.query_hostapis()]
-    wasapi = api_names.index("Windows WASAPI") if "Windows WASAPI" in api_names else None
-    best: Optional[int] = None
-    for i, d in enumerate(sd.query_devices()):
-        if d["max_output_channels"] <= 0 or CABLE_HINT not in d["name"]:
-            continue
-        if wasapi is not None and d["hostapi"] == wasapi and d["max_output_channels"] == 2:
-            return i  # WASAPI stereo = paling bisa diandalkan
-        best = best if best is not None else i
-    if best is None:
-        raise TtsUnavailable("VB-Cable tidak ditemukan (pasang vb-audio.com/Cable)")
-    return best
+    for idx, dev in enumerate(sd.query_devices()):
+        if CABLE_HINT in dev["name"] and dev["max_output_channels"] > 0:
+            return idx
+    raise TtsUnavailable("VB-Cable tidak ditemukan (CABLE Input)")
+
 
 _queue: Optional["queue.Queue[str]"] = None
 DEBUG_MONITOR = "--debug" in sys.argv   # speaker nyata, bukan CABLE Input
+
 
 def _ensure_worker() -> None:
     """Buat antrean + thread daemon TTS sekali saja (dipakai prewarm/enqueue)."""
     global _queue
     if _queue is None:
         _queue = queue.Queue()
-        threading.Thread(target=_tts_worker, daemon=True,
-                         name="isyaratku-tts").start()
+        threading.Thread(
+            target=_tts_worker, daemon=True,
+            name="isyaratku-tts").start()
+
+
+def queue_depth() -> int:
+    """Jumlah kata menunggu diucapkan (untuk panel debug & log)."""
+    return _queue.qsize() if _queue is not None else 0
 
 
 def prewarm() -> None:
     """Muat voice SEBELUM loop video: pemanggilan pertama ~1,7 s, dan di luar
-    loop itu tak terlihat sebagai freeze. Aman dipanggil berulang (no-op)."""
+    loop supaya tidak muncul sebagai freeze saat kata pertama."""
     _ensure_worker()
     global _voice
     with _lock:
         if _voice is None:
-            _voice = _load_voice()
+            try:
+                _voice = _load_voice()
+                _log.info("voice Piper dimuat: %s", VOICE)
+            except TtsUnavailable as exc:
+                _log.error("voice Piper gagal dimuat: %s", exc)
+                raise
+
 
 
 def speak_async(text: str) -> None:
     """Antre ucapan; thread daemon memulainya. Tidak pernah menahan loop video:
-    worker video tetap mengirim frame selagi audio diputar terpisah."""
+    menunggu sintesis di loop video akan menghentikan cap.read()."""
     _ensure_worker()
-    # TANPA pemotongan backlog: dulu antrean dipangkas ke 6, isyarat cepat
-    # >6 kata buang kata di tengah/akhir tanpa suara = "terpotong di akhir".
-    # Semua kata tetap diputar sampai habis; backpressure bawaan producer
-    # (word_pause 1,2 s) sudah lebih cepat dari konsumsi (~0,6 s/kata).
     _queue.put(text)
 
 
@@ -137,7 +147,7 @@ def _tts_worker() -> None:
             # bisa dibedakan dari "tidak ada yang diucapkan". Ditulis ke
             # _last_error juga supaya jendela debug tak mengklaim "aktif".
             _last_error = f"{type(exc).__name__}: {exc}"
-            print(f"TTS dilewati: {_last_error}")
+            _log.warning("TTS dilewati: %s", _last_error)
         _queue.task_done()
 
 
