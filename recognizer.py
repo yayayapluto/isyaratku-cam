@@ -6,6 +6,7 @@ mengimpor dari sini (jangan duplikasi loader).
 
 from __future__ import annotations
 
+import math
 import os
 from collections import Counter, deque
 from typing import Optional
@@ -20,9 +21,10 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(ROOT, "models", "bisindo_alphabet",
                           "efficientnet_bisindo_sign_language.pth")
 
-# [ASUMSI] ukuran input & normalisasi ImageNet — model card diam.
-# Divalidasi manual saat pengukuran A-Z (docs/MODEL_SELECTION.md).
-INPUT_SIZE = (224, 224)  # (width, height)
+# Terukur pada dataset VOC 520 citra (docs/MODEL_SELECTION.md): 224x224 =
+# 58,27% -> 260x260 = 68,85%. Crop TIDAK dibalik sebelum resize.
+# Normalisasi ImageNet (model card diam) — [ASUMSI] sampai divalidasi webcam.
+INPUT_SIZE = (260, 260)  # (width, height)
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
@@ -53,6 +55,12 @@ def preprocess(frame: np.ndarray) -> torch.Tensor:
     return torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0)
 
 
+def top_k(probs: torch.Tensor, labels: list[str], k: int = 3) -> list[tuple[str, float]]:
+    """Top-k (label, prob) terurut turun — untuk debug panel & log."""
+    values, indices = torch.topk(probs, min(k, len(labels)))
+    return [(labels[int(i)], float(v)) for v, i in zip(values, indices)]
+
+
 class Smoother:
     """N-dari-5: label harus muncul >= 4 kali dari 5 frame agar stabil."""
 
@@ -69,3 +77,31 @@ class Smoother:
 
     def reset(self) -> None:
         self._history.clear()
+
+    def history(self) -> list[str]:
+        """Riwayat label window terakhir (read-only, urutan terlama ke
+        terbaru). Untuk debug panel; tidak mengubah update()."""
+        return list(self._history)
+
+
+def _close(a: float, b: float, tol: float = 1e-5) -> bool:
+    """float32 vs literal desimal: beda ~1e-7, bukan bug."""
+    return math.isclose(a, b, abs_tol=tol)
+
+
+if __name__ == "__main__":
+    smoother = Smoother()
+    for _ in range(4):        # window belum penuh -> selalu None
+        assert smoother.update("A") is None
+    assert smoother.update("A") == "A", "stabil baru di frame ke-5"
+    assert smoother.history() == ["A"] * 5
+    smoother.reset()
+    assert smoother.history() == []
+
+    probs = torch.zeros(26)
+    probs[0], probs[1], probs[2] = 0.7, 0.2, 0.1
+    top = top_k(probs, [chr(65 + i) for i in range(26)])
+    assert [t[0] for t in top] == ["A", "B", "C"], top
+    assert all(_close(a, b) for (_, a), b in zip(top, (0.7, 0.2, 0.1))), top
+    assert INPUT_SIZE == (260, 260)
+    print("recognizer self-check OK")

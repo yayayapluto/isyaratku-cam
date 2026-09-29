@@ -11,9 +11,14 @@ from typing import Optional
 
 import numpy as np
 
+
+import logs
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 HAND_MODEL = os.path.join(ROOT, "models", "hand", "hand_landmarker.task")
-PADDING = 20  # px, sesuai TECH_SPEC §4.2
+# Terukur pada dataset VOC 520 citra (docs/MODEL_SELECTION.md): pad10 68,65%
+# > pad20 68,08%. TECH_SPEC §4.2 menyebut 20; yang menang angka terukur.
+PADDING = 10  # px padding bbox sebelum letterbox
 MIN_CROP = 32  # px; crop lebih kecil dari ini tidak dipakai untuk prediksi
 
 _landmarker = None
@@ -30,6 +35,9 @@ class HandDetector:
         global _landmarker
         if _landmarker is None:
             if not os.path.exists(HAND_MODEL):
+                logs.get_logger().error(
+                    "model tangan tidak ada: %s", HAND_MODEL
+                )
                 raise FileNotFoundError(
                     f"model tangan tidak ada: {HAND_MODEL} "
                     "(jalankan scripts/download_models.sh)"
@@ -44,6 +52,9 @@ class HandDetector:
                 num_hands=num_hands,
             )
             _landmarker = vision.HandLandmarker.create_from_options(options)
+            logs.get_logger().info(
+                "hand landmarker dimuat: %s (num_hands=%d)", HAND_MODEL, num_hands
+            )
         self._landmarker = _landmarker
 
     def detect(self, frame_rgb: np.ndarray) -> Optional[list[tuple[float, float]]]:
