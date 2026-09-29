@@ -183,6 +183,12 @@ def train(args: argparse.Namespace) -> int:
     ]
     if not letters:
         raise SystemExit(f"ERROR: tidak ada huruf di {train_dir}")
+    if len(letters) != 26:
+        raise SystemExit(
+            f"ERROR: hanya {len(letters)} huruf punya citra di {train_dir}; "
+            f"butuh 26 (A-Z) untuk fine-tune. Build dulu: "
+            "python scripts/build_dataset.py ... (lihat docs/training_plan.md §4)"
+        )
     model, labels = _load_pretrained(args.resume)
     missing = [l for l in letters if l not in labels]
     if missing:
@@ -194,6 +200,14 @@ def train(args: argparse.Namespace) -> int:
     train_set = LetterDataset(train_dir, letters, True)
     val_set = LetterDataset(val_dir, letters, False)
 
+    for name, dataset, split_dir in (
+        ("train", train_set, train_dir), ("val", val_set, val_dir)
+    ):
+        if len(dataset) == 0:
+            raise SystemExit(
+                f"ERROR: split {name} kosong di {split_dir}; "
+                "jalankan build dulu (docs/training_plan.md §4)"
+            )
     train_loader = DataLoader(train_set, batch_size=args.batch, shuffle=True,
                               num_workers=0)
     val_loader = DataLoader(val_set, batch_size=args.batch, shuffle=False,
