@@ -21,13 +21,12 @@ import tts
 from hand_detect import HandDetector, crop_hand
 
 FPS = 20
-BACKEND_ORDER = ("obs", "unitycapture")  # OBS dulu: terbukti di M1
+BACKEND_ORDER = ("unitycapture", "obs")  # Unity Capture utama, OBS cadangan
 
 
 def open_vcam(width: int, height: int, preferred: Optional[str] = None) -> tuple:
     """Buka kamera virtual di resolusi frame webcam. (camera, backend_name)."""
     order = (preferred,) if preferred else BACKEND_ORDER
-    errors = []
     for name in order:
         try:
             cam = pyvirtualcam.Camera(
@@ -35,10 +34,10 @@ def open_vcam(width: int, height: int, preferred: Optional[str] = None) -> tuple
             )
             return cam, name
         except Exception as exc:  # backend tidak terpasang / device lemah
-            errors.append(f"{name}: {exc}")
+            pass
     raise RuntimeError(
-        " | ".join(errors)
-        + " (nyalakan OBS Virtual Camera: Controls > Start Virtual Camera)"
+        "Kamera virtual tidak ditemukan. Jalankan Install.bat Unity Capture "
+        "sebagai Administrator, lalu restart aplikasi. Cadangan: pasang OBS."
     )
 
 
@@ -106,7 +105,15 @@ def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
 
 
 class Worker:
-    """Loop utama. on_status(teks) dipanggil tiap frame untuk GUI."""
+    """Loop utama.
+
+    Semua callback dipanggil dari worker thread — GUI wajib memakainya lewat
+    signal Qt, tidak boleh langsung menyentuh widget:
+      on_status(teks)      overlay/kalimat berubah
+      on_candidate(huruf)  huruf kandidat terbaru (belum tentu stabil)
+      on_spoken(kalimat)   kalimat selesai (buffer dibersihkan)
+      on_health(dict)      kesehatan device: virtual_cam/virtual_mic/model
+    """
 
     def __init__(
         self,
@@ -114,8 +121,14 @@ class Worker:
         enable_tts: bool = True,
         font_size: int = 22,
         debug: bool = False,
+        on_candidate: Optional[Callable[[str], None]] = None,
+        on_spoken: Optional[Callable[[str], None]] = None,
+        on_health: Optional[Callable[[dict], None]] = None,
     ) -> None:
         self.on_status = on_status
+        self.on_candidate = on_candidate
+        self.on_spoken = on_spoken
+        self.on_health = on_health
         self.enable_tts = enable_tts
         self.font_size = font_size
         self.debug = debug
@@ -128,6 +141,7 @@ class Worker:
         self.hand_frames = 0
         self.inferred_frames = 0
         self.last_letter: Optional[str] = None
+        self.backend: Optional[str] = None
 
     def stop(self) -> None:
         self.running = False
@@ -161,6 +175,36 @@ class Worker:
         if self.on_status:
             self.on_status(text)
 
+    def _flush(self) -> bool:
+        """Jalankan timer pipeline; laporkan kata/kalimat yang selesai.
+
+        True = buffer baru kosong, pemanggil boleh lewati pengiriman frame
+        untuk iterasi ini (overlay kosong) tanpa kehilangan timer.
+        """
+        flushed = self._pipeline.tick()
+        if flushed:
+            if self.on_spoken:
+                self.on_spoken(flushed)
+            self._status(flushed)
+        return False
+
+    def _health(self, backend: Optional[str] = None) -> None:
+        """Lapor kesehatan device ke GUI. Backend=None = kamera virtual gagal."""
+        if not self.on_health:
+            return
+        try:
+            tts.cable_output_device()
+            mic_ok = True
+        except tts.TtsUnavailable:
+            mic_ok = False
+        self.on_health(
+            {
+                "virtual_cam": backend,
+                "virtual_mic": mic_ok,
+                "model": self._model is not None,
+            }
+        )
+
     def run(self) -> None:
         """Sampai stop() atau error. Melempar RuntimeError bila device gagal."""
         try:
@@ -193,6 +237,8 @@ class Worker:
             cap.release()
             raise RuntimeError(f"kamera virtual gagal: {exc}") from exc
         self.running = True
+        self.backend = backend
+        self._health(backend=backend)
         self._status(f"berjalan ({backend})")
 
         model, labels = self._model
@@ -215,9 +261,8 @@ class Worker:
                     smoother.reset()
                     # tick() WAJIB di cabang ini: tanpa ini timer absen tak
                     # pernah jalan (tangan hilang tak menghasilkan huruf)
-                    done = self._pipeline.tick()
-                    if done:
-                        self._status(done)
+                    if self._flush():
+                        continue
                     self._preview(frame, None, self._pipeline.text)
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
@@ -232,9 +277,8 @@ class Worker:
                 cropped = crop_hand(frame, marks)
                 self._preview(frame, marks, self._pipeline.text, cropped)
                 if cropped is None:   # tangan terlalu jauh/kecil: skip prediksi
-                    done = self._pipeline.tick()   # tetap jalankan timer absen
-                    if done:
-                        self._status(done)
+                    if self._flush():   # tetap jalankan timer absen
+                        continue
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
                     cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -252,9 +296,9 @@ class Worker:
                 # menyaring jitter — bukan confidence.
                 if stable and probs.max() > 0.3:
                     self._pipeline.add_letter(stable)
-                spoken = self._pipeline.tick()
-                if spoken:
-                    self._status(spoken)
+                self._flush()
+                if self.on_candidate:
+                    self.on_candidate(letter)
 
                 self.sent_frames += 1
                 draw_text(frame, self._pipeline.text, self.font_size)
