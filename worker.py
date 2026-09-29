@@ -24,14 +24,14 @@ WIDTH, HEIGHT, FPS = 1280, 720, 20
 BACKEND_ORDER = ("obs", "unitycapture")  # OBS dulu: terbukti di M1
 
 
-def open_vcam(preferred: Optional[str] = None) -> tuple:
-    """Buka kamera virtual. Kembalikan (camera, backend_name)."""
+def open_vcam(width: int, height: int, preferred: Optional[str] = None) -> tuple:
+    """Buka kamera virtual di resolusi frame webcam. (camera, backend_name)."""
     order = (preferred,) if preferred else BACKEND_ORDER
     errors = []
     for name in order:
         try:
             cam = pyvirtualcam.Camera(
-                width=WIDTH, height=HEIGHT, fps=FPS, backend=name
+                width=width, height=height, fps=FPS, backend=name
             )
             return cam, name
         except Exception as exc:  # backend tidak terpasang / device lemah
@@ -42,31 +42,32 @@ def open_vcam(preferred: Optional[str] = None) -> tuple:
     )
 
 
-def open_webcam() -> cv2.VideoCapture:
+def open_webcam() -> tuple[cv2.VideoCapture, int, int]:
+    """Buka webcam. Kembalikan (cap, width, height) sesuai yang benar-benar
+    dikirim kamera — bukan yang diminta, karena driver bisa menolaknya."""
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     if not cap.isOpened():
         raise RuntimeError("webcam tidak ditemukan")
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
-    return cap
+    return cap, int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(
+        cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
 
 def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
-    """Subtitle gaya film: teks putih, outline hitam tebal, terpusat.
+    """Subtitle gaya film: teks putih + outline hitam tipis, terpusat.
 
-    Sesuai referensi: tanpa band gelap, teks langsung di atas gambar.
-    Outline tebal menjaga keterbacaan di latar webcam yang sibuk."""
+    Sesuai referensi: tanpa band gelap, teks langsung di atas gambar."""
     if not text:
         return frame
     h, w = frame.shape[:2]
     scale = font_size / 20.0
-    thick = max(2, int(round(font_size / 7)))
-    outline = thick * 2 if thick > 1 else 2
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, outline)
+    thick = max(1, int(round(font_size / 7)))
+    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
     x = max(10, (w - tw) // 2)
     y = max(th + 8, h - int(h * 0.08))
     cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                (0, 0, 0), outline, cv2.LINE_AA)
+                (0, 0, 0), 1, cv2.LINE_AA)
     cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
                 (255, 255, 255), thick, cv2.LINE_AA)
     return frame
@@ -144,10 +145,17 @@ class Worker:
         self._pipeline = text_pipeline.TextPipeline(speak=speak)
 
         try:
-            cam, backend = open_vcam()
+            cap, cam_w, cam_h = open_webcam()
         except RuntimeError as exc:
+            raise RuntimeError(f"webcam gagal dibuka: {exc}") from exc
+
+        try:
+            # vcam SETELAH webcam: resolusi stream harus cocok dengan frame
+            # yang dikirim, kalau tidak pyvirtualcam mis-render.
+            cam, backend = open_vcam(cam_w, cam_h)
+        except RuntimeError as exc:
+            cap.release()
             raise RuntimeError(f"kamera virtual gagal: {exc}") from exc
-        cap = open_webcam()
         self.running = True
         self._status(f"berjalan ({backend})")
 
@@ -164,7 +172,6 @@ class Worker:
                     continue
                 missed = 0
                 frame = cv2.flip(frame, 1)
-                frame = cv2.resize(frame, (WIDTH, HEIGHT))
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 marks = detector.detect(rgb)
                 if marks is None:

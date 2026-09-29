@@ -51,7 +51,8 @@ def find_virtual_device() -> tuple[int, np.ndarray]:
             continue
         ok, frame = cap.read()
         cap.release()
-        if ok and frame is not None and white_subtitle_pixels(frame) > 50:
+        # 150 = ambang minimum terukur; frame webcam terang bisa >50 putih
+        if ok and frame is not None and white_subtitle_pixels(frame) > 150:
             return idx, frame
     raise RuntimeError("device virtual dengan overlay tidak ditemukan")
 

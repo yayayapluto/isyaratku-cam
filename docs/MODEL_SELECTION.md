@@ -57,7 +57,7 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 | `MIN_CROP = 32` | Guard hanya untuk tangan jauh; lapangan 158–182px | pengukuran langsung |
 | Pipeline crop→preprocess→model | berjalan (output label + confidence) | verifikasi sintetis |
 | worker E2E (stream + deteksi + klasifikasi) | `sent=11 hand=11 inferred=11 letter=P` | `scripts/verify_m36.py` |
-| Overlay subtitle posisi film | 414 pixel hijau di strip bawah pada read-back 640×480 (ambang 256) | `scripts/verify_m1.py` |
+| Overlay subtitle putih | 1287 pixel putih di area bawah, read-back 640×480 (ambang 150) | `scripts/verify_m1.py` |
 | Hand-absence flush | self-check hijau: `tick()` dua kali → "HI" | `text_pipeline.py` |
 | TTS ke VB-Cable | RMS=183,9, peak=32768 | `scripts/verify_m5.py` |
 
@@ -75,3 +75,29 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 Checkbox "Mode debug" di `main.py` membuka jendela pratinjau: bbox magenta +
 landmark kuning + ukuran crop + huruf + overlay identik dengan output.
 Berguna untuk membedakan "model salah" dari "crop jelek / tangan jauh".
+
+## 7. Uji 3 jalur input pada dataset rhiosutoyo (terukur)
+
+Diukur pada 104–130 citra berlabel A–Z dari `data/bisindo_rhio/collectedimages/`:
+
+| Jalur input | Benar | Conf rata |
+|---|---|---|
+| full frame langsung | 30/130 (23%) | 0.27 |
+| crop bbox, resize squash | **82/129 (64%)** | 0.48 |
+| crop bbox + letterbox | **82/129 (64%)** | 0.48 |
+
+Simpulan:
+
+- Model dilatih pada **crop tangan**, bukan frame penuh → jalur produksi
+  `crop_hand()` benar.
+- Letterbox == squash secara akurasi → letterbox tetap dipertahankan karena
+  gratis dan lebih aman untuk bentuk huruf, tapi bukan sumber error.
+- Deteksi MediaPipe pada citra dataset: **76/78 (97%)** → detektor sehat.
+  Hasil 0/40 di webcam berarti tidak ada tangan di frame, bukan bug.
+- Sweep ukuran/normalisasi: 224×224 + ImageNet **65%**, half 56%, raw 38%,
+  300×300 67% → asumsi A1/A2 benar.
+
+**Sisa pertanyaan:** 64% jauh di bawah 98.6% di model card. Bobot `Syizuril`
+dilatih dengan 9.169 citra (bukan 520 dari dataset ini), jadi gap wajar.
+Dataset rhiosutoyo berguna sebagai **baseline regresi**, bukan jalur
+fine-tune. Fine-tune sebaiknya memakai citra webcam milik pengguna.
