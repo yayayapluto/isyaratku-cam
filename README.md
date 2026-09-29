@@ -90,9 +90,11 @@ Virtual Camera*.
 3. Turunkan tangan ±1,2 detik → **kata** diucapkan dan masuk kalimat; overlay tetap menampilkan kalimat + kata berikutnya. Tangan turun ±3 detik → kalimat selesai, overlay bersih.
 4. Segmented **S/M/L** mengatur ukuran font overlay (14/22/32, langsung berlaku
    saat jalan).
-5. **Debug** (opsional): `python app.py --debug` → jendela pratinjau terpisah
-   dengan bbox magenta, landmark kuning, ukuran crop, dan teks overlay. `q`
-   menutup jendela dan menghentikan worker.
+5. **Debug** (opsional): `python app.py --debug` → dua jendela pratinjau
+   terpisah: **kamera** (landmark kuning, bbox magenta, panel status, overlay
+   teks tampil ter-mirror) dan **crop** (citra persis yang masuk model —
+   sudah mirror dan di-upscale 240px — plus huruf teratas + confidence).
+   `q` menutup jendela dan menghentikan worker.
 
 Di Zoom/Meet: kamera = **"Unity Video Capture"** (atau "OBS Virtual Camera"
 kalau dipakai cadangan), mikrofon = **"CABLE Output"**.

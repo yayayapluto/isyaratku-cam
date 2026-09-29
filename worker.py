@@ -154,26 +154,36 @@ class Worker:
     def stop(self) -> None:
         self.running = False
 
-    def _preview(self, frame, marks, text: str, crop=None) -> None:
-        """Mode debug saja: jendela debug dengan bbox + keterangan deteksi.
+    def _preview(
+        self,
+        frame: np.ndarray,
+        marks,
+        text: str,
+        crop=None,
+        letter: str = "",
+        conf: float = 0.0,
+    ) -> None:
+        """Mode debug saja: DUA jendela.
 
-        Tampilan TIDAK dibalik (apa adanya), sedangkan crop yang masuk ke
-        model DIBALIK — sesuai instruksi user. Landmark diukur pada frame tak
-        dibalik ini juga, jadi bbox jatuh persis di atas tangan.
+        1. kamera penuh — landmark, bbox, panel status, overlay teks.
+        2. crop — citra PERSIS yang masuk model (sudah mirror), di-upscale.
+
+        Tampilan jendela 1 dibalik supaya terasa seperti cermin (tangan kanan
+        user muncul di kanan jendela). Landmark & bbox DIPETIK lewat (1-x):
+        keduanya diukur pada frame tak dibalik, jadi tanpa pemetaan itu jatuh
+        di sisi yang salah. Crop yang masuk model tetap dibalik di tempat lain
+        (pemanggil), jendela 2 menampilkannya apa adanya.
         """
         if not self.debug:
             return
-        # Webcam (driver Windows) mengirim frame sudah terlihat mirror; dibalik
-        # sekali supaya jendela debug seperti cermin biasa. Landmark & crop
-        # tetap berasal dari frame TAK dibalik, jadi petunjuk deteksi tidak
-        # ikut bergeser; yang dibalik hanya gambar siap tampil.
         show = cv2.flip(frame, 1)
+        h, w = show.shape[:2]
         for x, y in marks if marks else []:
-            cv2.circle(show, (int(x * show.shape[1]), int(y * show.shape[0])), 3,
+            cv2.circle(show, (int((1 - x) * w), int(y * h)), 3,
                        (0, 255, 255), -1)
         if marks:
-            xs = [x * show.shape[1] for x, _ in marks]
-            ys = [y * show.shape[0] for _, y in marks]
+            xs = [(1 - x) * w for x, _ in marks]
+            ys = [y * h for _, y in marks]
             cv2.rectangle(show, (int(min(xs)), int(min(ys))),
                           (int(max(xs)), int(max(ys))), (255, 0, 255), 2)
         crop_note = "-" if crop is None else f"{crop.shape[1]}x{crop.shape[0]}px"
@@ -190,7 +200,7 @@ class Worker:
         # Panel tepi-atas: latar putih penuh lebar, teks hitam. Lebar = panjang
         # teks s/d batas lebar frame, jadi tak pernah terpotong.
         px, py = 10, 24
-        panel_w = min(show.shape[1] - 2 * px, tw + 20)
+        panel_w = min(w - 2 * px, tw + 20)
         cv2.rectangle(show, (px - 6, py - 22), (px + panel_w, py + 10),
                       (255, 255, 255), -1)
         cv2.putText(show, line, (px, py), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
@@ -199,26 +209,43 @@ class Worker:
         # jendela debug 640x480, dan draw_text menskalakan tinggi baris dari
         # font_size — 32px di situ menabrak tepi bawah.
         draw_text(show, text, min(self.font_size, 18))
-        cv2.imshow("IsyaratKu debug (tekan q untuk tutup jendela)", show)
+        cv2.imshow("IsyaratKu debug - kamera (tekan q untuk tutup)", show)
+
+        # Jendela 2: crop yang DIBALIK (sama dengan input model), di-upscale
+        # ke 240px supaya bentuk tangan terbaca walau crop aslinya kecil.
+        if crop is None:
+            view = np.zeros((240, 240, 3), np.uint8)
+            cv2.putText(view, "tidak ada crop", (16, 130),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
+        else:
+            view = cv2.flip(crop, 1)
+            side = max(view.shape[:2])
+            if side < 240:
+                view = cv2.resize(
+                    view, (int(round(view.shape[1] * 240 / side)),
+                           int(round(view.shape[0] * 240 / side))),
+                    interpolation=cv2.INTER_NEAREST)
+        if letter:
+            cv2.putText(view, f"{letter} {conf:.2f}", (8, 26),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2,
+                        cv2.LINE_AA)
+        cv2.imshow("IsyaratKu debug - crop (tekan q untuk tutup)", view)
+
         if cv2.waitKey(1) & 0xFF == ord("q"):
             self.running = False
+
 
     def _status(self, text: str) -> None:
         if self.on_status:
             self.on_status(text)
 
-    def _flush(self) -> bool:
-        """Jalankan timer pipeline; laporkan kata/kalimat yang selesai.
-
-        True = buffer baru kosong, pemanggil boleh lewati pengiriman frame
-        untuk iterasi ini (overlay kosong) tanpa kehilangan timer.
-        """
+    def _flush(self) -> None:
+        """Jalankan timer pipeline; laporkan kalimat yang selesai."""
         flushed = self._pipeline.tick()
         if flushed:
             if self.on_spoken:
                 self.on_spoken(flushed)
             self._status(flushed)
-        return False
 
     def _health(self, backend: Optional[str] = None) -> None:
         """Lapor kesehatan device ke GUI. Backend=None = kamera virtual gagal."""
@@ -299,8 +326,7 @@ class Worker:
                     smoother.reset()
                     # tick() WAJIB di cabang ini: tanpa ini timer absen tak
                     # pernah jalan (tangan hilang tak menghasilkan huruf)
-                    if self._flush():
-                        continue
+                    self._flush()
                     self._preview(frame, None, self._pipeline.text)
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
@@ -313,10 +339,9 @@ class Worker:
                 # belum memberi huruf baru (tanpa ini kata tak pernah selesai)
                 self._pipeline.mark_present()
                 cropped = crop_hand(frame, marks)
-                self._preview(frame, marks, self._pipeline.text, cropped)
                 if cropped is None:   # tangan terlalu jauh/kecil: skip prediksi
-                    if self._flush():   # tetap jalankan timer absen
-                        continue
+                    self._flush()
+                    self._preview(frame, marks, self._pipeline.text, None)
                     draw_text(frame, self._pipeline.text, self.font_size)
                     self.sent_frames += 1
                     cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -340,8 +365,10 @@ class Worker:
                 self._flush()
                 if self.on_candidate:
                     self.on_candidate(letter)
-
-                self.sent_frames += 1
+                self._preview(
+                    frame, marks, self._pipeline.text, cropped,
+                    letter, float(probs.max()),
+                )
                 draw_text(frame, self._pipeline.text, self.font_size)
                 cam.send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 cam.sleep_until_next_frame()

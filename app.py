@@ -488,7 +488,7 @@ class MainWindow(QWidget):
         for row, value in zip(self.recent_labels, rows[:3]):
             row.setText(value)
 
-    def on_health(self, data: dict) -> None:
+    def on_health(self, data: dict, probe: bool = False) -> None:
         cam = data.get("virtual_cam")
         # Hanya dari worker yang baru start: probe saat aplikasi dibuka juga
         # memanggil ini saat state masih BERHENTI (jangan ubah tombol).
@@ -501,6 +501,11 @@ class MainWindow(QWidget):
             self.chip_cam.set_ok("Unity Capture")
         elif cam == "obs":
             self.chip_cam.set_warn("OBS")
+        elif probe:
+            # Startup probe TIDAK membuka kamera virtual (itu pekerjaan
+            # worker). Chip dikunci "unchecked" sampai ada laporan nyata;
+            # merah di sini akan berbohong "gagal" padahal memang belum diuji.
+            self.chip_cam.set_unknown()
         else:
             self.chip_cam.set_bad()
         mic = data.get("virtual_mic")
@@ -536,7 +541,7 @@ class MainWindow(QWidget):
         }
         # virtual_cam=None -> on_health hanya set chip kamera, tidak
         # mengubah state. State tetap BERHENTI, teks terakhir tetap terlihat.
-        self.on_health(health)
+        self.on_health(health, probe=True)
 
     def on_error(self, message: str) -> None:
         self._apply_state(STATE_ERROR)
