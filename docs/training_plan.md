@@ -122,22 +122,29 @@ python scripts/build_dataset.py \
 ## 5. Evaluasi & gate
 
 1. Validasi `data/finetune/val`: metrik otomatis saat ini hanya `val_acc`
-   dari `scripts/train_finetune.py` (per epoch, tercetak ke stdout) —
-   confusion matrix 26×26 per huruf **belum ada skripnya** (gap, lihat §10).
+   (bukan pembanding 68,65% — jalur crop berbeda, lihat §10) dari
+   `scripts/train_finetune.py` (per epoch, dicetak ke stdout) — confusion
+   matrix 26×26 per huruf **belum ada skripnya** (gap, lihat §10).
    Catatan: `val_acc` pada `data/finetune/val` penuh **tidak setara**
    dengan baseline 68,65% — 1.189 dari 1.703 crop (alfredo 570 +
    meisyavira 619) berasal dari deteksi MediaPipe nyata
    (`build_dataset.py`, `read_folders_source` → landmark None), sedangkan
    baseline memakai landmark sintetis dari sudut bbox VOC. Namun subset
-   rhio-saja dari val (514 crop → 103 crop val ter-split) memakai jalur
-   crop sintetis bbox yang IDENTIK dengan `eval_offline.py`, jadi subset itu
-   **setara langsung** dengan 68,65% dan boleh dipakai sebagai gate regresi
-   G1; untuk bisa dipakai, subset itu harus diekstrak dulu (belum ada
-   skripnya).
+   rhio-saja dari val (514 crop di `data/finetune`, terbagi train/val
+   menurut shuffle seed 42) memakai jalur crop sintetis bbox yang IDENTIK
+   dengan `eval_offline.py`, jadi subset itu **setara langsung** dengan
+   68,65% dan boleh dipakai sebagai gate regresi G1. Namun subset itu
+   **tidak dapat diekstrak dari `data/finetune` saat ini**:
+   `build_dataset.py` tidak menyimpan tag asal crop dan menulis output
+   sebagai `<LETTER>/NNNN.jpg` (diberi nama baru), jadi provenance hilang.
+   Ekstraksi perlu menjalankan ulang build dengan tag sumber per crop
+   (perubahan kode), bukan filter pasca-facto.
 2. **Gate akhir: `python scripts/test_letters.py` di webcam** (kamera &
-   cahaya sama dengan skenario a). Fine-tune hanya mengganti
-   `models/bisindo_alphabet/` bila **mengalahkan 68,65%** pada holdout
-   webcam itu.
+   cahaya sama dengan skenario a). Fine-tune mengganti
+   `models/bisindo_alphabet/` hanya bila mengalahkan hasil webcam model
+   baseline itu sendiri pada skenario a (bobot baseline, kamera & cahaya
+   sama, `docs/results_m2.json`) — **bukan** angka offline VOC 68,65%, yang
+   diukur lewat jalur crop yang berbeda.
 3. Backup bobot lama sebelum swap: `models/bisindo_alphabet/` →
    `models/bisindo_alphabet_backup_<tanggal>/` (folder `models/` tidak masuk
    git, jadi backup murni lokal).
