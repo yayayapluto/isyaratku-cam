@@ -144,14 +144,18 @@ target produk, **bukan** hasil terukur.
 **Baseline terukur sekarang: 68,65%** (`scripts/eval_offline.py`, dataset VOC
 520 citra, 260×260 + pad10 tanpa flip) — dan **itulah satu-satunya sumber
 angka terukur di repo ini: `docs/MODEL_SELECTION.md` §3/§4. Jangan pakai
-angka lain; jangan hitung ulang di dokumen ini.**
+angka lain; jangan hitung ulang di dokumen ini.** Angka ini datang dari
+jalur crop bbox VOC sintetis (`eval_offline.py` menyusun landmark dari sudut
+bbox), jadi **tidak langsung setara** dengan metrik fine-tune apa pun di
+`data/finetune/val` (crop dari deteksi MediaPipe nyata + PADDING=10 — asal
+crop beda, lihat §10).
 
 Gate fine-tuning (keduanya wajib, urut):
 
 | # | Gate | Target | Status |
 |---|---|---|---|
-| G1 | `scripts/eval_offline.py` pada VOC rhio (`DATA_DIR` hardcoded ke `data/bisindo_rhio`, hanya baca `{train,test}`) | tetap **68,65%** sebagai baseline regresi — script ini **tidak bisa** menilai `data/finetune/val` | baseline saja; belum dijalankan ulang pasca-rebuild |
-| G2 | `scripts/test_letters.py` di webcam → `docs/results_m2.json` | **> 68,65%** dan menuju target 85% | **belum ada berkasnya — wajib dibuat dulu; jumlahnya tidak boleh dikarang** |
+| G1 | `scripts/eval_offline.py` pada VOC rhio (`DATA_DIR` hardcoded ke `data/bisindo_rhio`, hanya baca `{train,test}`) | tetap **68,65%** sebagai cek regresi saja (turun berarti lingkungan rusak) — baseline ini diukur lewat jalur crop bbox VOC sintetis, jadi **tidak setara** dengan metrik fine-tune di `data/finetune/val` | baseline saja; belum dijalankan ulang pasca-rebuild |
+| G2 | `scripts/test_letters.py` di webcam → `docs/results_m2.json` | **> 68,65%** pada holdout webcam yang sama dengan skenario a, menuju target 85%; A/B baseline vs bobot fine-tune wajib lewat jalur crop yang sama — tanpa skrip eval folder-crop untuk `data/finetune/val`, A/B yang valid hari ini hanya uji webcam ini (`val_loss`/`val_acc` `train_finetune.py` tetap internal latih, sudah jenuh pada 12 citra/huruf, bukan akurasi produk) | **belum ada berkasnya — wajib dibuat dulu; jumlahnya tidak boleh dikarang** |
 
 ## 6. Risiko
 
@@ -164,7 +168,7 @@ Gate fine-tuning (keduanya wajib, urut):
 | Duplikat lintas-sumber: meisyavira↔achmadnoer (312 citra byte-identik, terverifikasi MD5 file-level) | dedupe MD5 crop di `build_dataset.py`; duplikat tercatat di baris `dilewati` |
 | Duplikat internal alfredo: 286 berkas byte-identik di dalam folder huruf yang sama (936 berkas → 650 unik, `data/datasets/alfredo_bisindo_letter/DATASET.md`) | dedupe MD5 piksel crop di `build_dataset.py` (277 crop duplikat alfredo dilewati, tercatat di baris `dilewati`); dedupe file-level saja tidak cukup — citra berbeda bisa jadi crop identik setelah resize INTER_AREA. Tidak terkait meisyavira/achmadnoer: MD5 file-level alfredo vs keduanya = 0 beririsan, dan resolusi alfredo (100–128 px) memang berbeda grid dari meisyavira (720–879 px) |
 | Salinan `" - Copy"` di VOC rhio (12 pasangan byte-identik) | `build_dataset.py` melewati nama yang memuat `" - Copy"` (log `salinan ' - Copy' dilewati`) |
-| Citra kecil alfredo (100–128 px) → crop up-scaled dari sedikit detail | pertahankan (variasi resolusi = augmentasi gratis), tapi jangan beri bobah khusus |
+| Citra kecil alfredo (100–128 px) → crop up-scaled dari sedikit detail | pertahankan (variasi resolusi = augmentasi gratis), tapi jangan beri beban khusus |
 | agungmrf hilang (±11,4 rb citra tambahan) | ulang unduhan di jaringan stabil; jangan pakai `curl -C -` pada unduhan yang pernah terputus (muncul hole 414 MB) |
 
 ## 7. Referensi skrip
@@ -286,6 +290,13 @@ metrik, model head) di luar berkas ini.
   metrik val otomatis sekarang: baris `val_loss`/`val_acc` yang dicetak
   `scripts/train_finetune.py` setiap epoch. Confusion matrix 26×26 dan
   akurasi per huruf masih belum ada skripnya.
+- **Belum ada skrip evaluasi folder-crop untuk `data/finetune/val`.**
+  Bila nanti dibuat, bobot baseline dan hasil fine-tune WAJIB dijalankan
+  lewat jalur crop yang identik dulu sebelum angkanya dibandingkan: crop
+  `data/finetune` memakai deteksi MediaPipe nyata + PADDING=10
+  (`scripts/build_dataset.py`), sedangkan `eval_offline.py` memakai landmark
+  sintetis dari sudut bbox VOC — dua asal bbox berbeda, angkanya tidak
+  dapat dibandingkan langsung.
 - **Hasil build bergantung isi folder.** Klaim "20 citra/huruf = 520" dari
   readme rhio tidak cocok dengan isi folder (§1); pakai angka terverifikasi,
   bukan readme.
