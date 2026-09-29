@@ -51,6 +51,18 @@ def _reset_out(out: str) -> None:
         shutil.rmtree(os.path.join(out, split), ignore_errors=True)
 
 
+def _assert_out_disjoint(out: str, sources: list[tuple[str, str]]) -> None:
+    """Tolak --out yang tumpang tindih sumber: _reset_out bisa menghapus data."""
+    out_real = os.path.realpath(out)
+    for root, _ in sources:
+        root_real = os.path.realpath(root)
+        if out_real == root_real or root_real.startswith(out_real + os.sep):
+            raise SystemExit(
+                f"ERROR: --out {out} tumpang tindih sumber {root}; "
+                "pilih folder keluaran lain"
+            )
+
+
 def _landmarks_from_bbox(
     x0: int, y0: int, x1: int, y1: int, w: int, h: int
 ) -> list[tuple[float, float]]:
@@ -215,6 +227,7 @@ def build(
     sources: list[tuple[str, str]], out: str, val_split: float, seed: int
 ) -> int:
     detector = load_detector() if any(f == "folders" for _, f in sources) else None
+    _assert_out_disjoint(out, sources)
     _reset_out(out)
     by_letter: dict[str, list[tuple[str, np.ndarray]]] = {}
     seen_hashes: set[str] = set()  # md5 crop, lintas sumber: pertama menang
