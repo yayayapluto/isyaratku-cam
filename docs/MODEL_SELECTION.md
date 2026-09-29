@@ -55,9 +55,9 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 |---|---|---|
 | Crop tangan nyata (20 frame) | min 158px, median 169px, max 182px | pengukuran langsung |
 | `MIN_CROP = 32` | Guard hanya untuk tangan jauh; lapangan 158–182px | pengukuran langsung |
-| Pipeline crop→preprocess→model | berjalan (output label + confidence) | verifikasi sintetis |
-| worker E2E (stream + deteksi + klasifikasi) | `sent=11 hand=11 inferred=11 letter=P` | `scripts/verify_m36.py` |
-| Overlay subtitle putih | 1287 pixel putih di area bawah, read-back 640×480 (ambang 150) | `scripts/verify_m1.py` |
+| Akurasi crop bbox pada dataset rhiosutoyo (130 citra berlabel) | **82/129 = 64%**, conf rata 0,48 | uji 3 jalur, §7 |
+| worker E2E di resolusi native (640×480) | `sent=448`, gate tangan/klasifikasi menunggu tangan di frame | `scripts/verify_m36.py` |
+| Overlay subtitle putih | 2593 pixel putih di area bawah, read-back 640×480 (ambang 150) | `scripts/verify_m1.py` |
 | Hand-absence flush | self-check hijau: `tick()` dua kali → "HI" | `text_pipeline.py` |
 | TTS ke VB-Cable | RMS=183,9, peak=32768 | `scripts/verify_m5.py` |
 
@@ -90,8 +90,10 @@ Simpulan:
 
 - Model dilatih pada **crop tangan**, bukan frame penuh → jalur produksi
   `crop_hand()` benar.
-- Letterbox == squash secara akurasi → letterbox tetap dipertahankan karena
-  gratis dan lebih aman untuk bentuk huruf, tapi bukan sumber error.
+- Letterbox == squash pada toleransi ini (82/129 identik). Perhatikan: crop uji
+  memakai anotasi bbox VOC, sedangkan `worker.py` memakai landmark MediaPipe
+  + PADDING=20 — geometri crop berbeda. Kesetaraan di sini berarti letterbox
+  **tidak teruji terpisah**, bukan terbukti gratis/benar.
 - Deteksi MediaPipe pada citra dataset: **76/78 (97%)** → detektor sehat.
   Hasil 0/40 di webcam berarti tidak ada tangan di frame, bukan bug.
 - Sweep ukuran/normalisasi: 224×224 + ImageNet **65%**, half 56%, raw 38%,

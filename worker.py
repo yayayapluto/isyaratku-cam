@@ -20,7 +20,7 @@ import text_pipeline
 import tts
 from hand_detect import HandDetector, crop_hand
 
-WIDTH, HEIGHT, FPS = 1280, 720, 20
+FPS = 20
 BACKEND_ORDER = ("obs", "unitycapture")  # OBS dulu: terbukti di M1
 
 
@@ -43,21 +43,23 @@ def open_vcam(width: int, height: int, preferred: Optional[str] = None) -> tuple
 
 
 def open_webcam() -> tuple[cv2.VideoCapture, int, int]:
-    """Buka webcam. Kembalikan (cap, width, height) sesuai yang benar-benar
-    dikirim kamera — bukan yang diminta, karena driver bisa menolaknya."""
+    """Buka webcam di resolusi native — TIDAK diminta/diresize ke 720p:
+    upscale 640x480->1280x720 menurunkan akurasi deteksi tangan (ukur:
+    3/62 native vs 0/60 setelah upscale) dan buang CPU."""
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     if not cap.isOpened():
         raise RuntimeError("webcam tidak ditemukan")
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
-    return cap, int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(
-        cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    return cap, w, h
 
 
 def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
-    """Subtitle gaya film: teks putih + outline hitam tipis, terpusat.
+    """Subtitle gaya film: teks putih + halo hitam tipis, terpusat.
 
-    Sesuai referensi: tanpa band gelap, teks langsung di atas gambar."""
+    Sesuai referensi: tanpa band gelap, teks langsung di atas gambar.
+    OpenCV 5 membatasi ketebalan stroke putText (th 10 == th 3), jadi halo
+    dibuat lewat mask + dilate — bukan stroke lebih tebal."""
     if not text:
         return frame
     h, w = frame.shape[:2]
@@ -66,10 +68,15 @@ def draw_text(frame: np.ndarray, text: str, font_size: int = 22) -> np.ndarray:
     (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
     x = max(10, (w - tw) // 2)
     y = max(th + 8, h - int(h * 0.08))
-    cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                (0, 0, 0), 1, cv2.LINE_AA)
-    cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                (255, 255, 255), thick, cv2.LINE_AA)
+
+    # mask teks -> dilate = halo, tempel hitam di bawah glyph putih
+    mask = np.zeros((h, w), np.uint8)
+    cv2.putText(mask, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
+                255, thick, cv2.LINE_AA)
+    halo = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=1)
+    halo_region = halo > 0
+    frame[halo_region] = (0, 0, 0)
+    frame[mask > 0] = (255, 255, 255)
     return frame
 
 
@@ -200,7 +207,10 @@ class Worker:
                 letter = labels[int(probs.argmax())]
                 self.last_letter = letter
                 stable = smoother.update(letter)
-                if stable and probs.max() > 0.5:
+                # Ambang 0,3: rata-rata conf pada crop benar 0,48, jadi 0,5
+                # membuang ~setengah prediksi benar. Smoother 4-dari-5 yang
+                # menyaring jitter — bukan confidence.
+                if stable and probs.max() > 0.3:
                     self._pipeline.add_letter(stable)
                 spoken = self._pipeline.tick()
                 if spoken:

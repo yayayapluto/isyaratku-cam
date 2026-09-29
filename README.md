@@ -8,25 +8,46 @@ Zoom/Meet, bukan di aplikasi ini.
 Target pengguna sementara: **penyandang tunawicara (bisu)** yang bisa mendengar
 tetapi tidak dapat berbicara. Subtema: **"Akses untuk Semua"** (SDG 3, 10, 16).
 
-## Status
+---
 
-M1–M6 jalan, terverifikasi E2E (`scripts/verify_m36.py`):
+## Arsitektur
 
 ```
-webcam → MediaPipe Hands (num_hands=2) → crop bbox +20px → letterbox persegi
-→ EfficientNet-B3 A–Z → smoothing 4-dari-5 → huruf→kata→kalimat
-→ overlay → OBS Virtual Camera + suara Piper → "CABLE Output"
+webcam (native res) → flip → MediaPipe Hands (num_hands=2)
+  → crop bbox +20px, letterbox persegi (hand_detect.py)
+  → resize 224×224, ImageNet norm (recognizer.py)
+  → EfficientNet-B3 A–Z → confidence
+  → Smoother 4-dari-5 (recognizer.py)
+  → huruf → kata (text_pipeline.py)
+  → overlay subtitle putih (worker.py) → OBS Virtual Camera
+                        └→ tangan absen 3 detik → Piper TTS → VB-Cable
 ```
 
-Kalimat diucapkan **setelah tangan hilang 3 detik** (TECH_SPEC §4.5) — menahan
-satu isyarat tidak membuat kata terpotong di mid-word.
+Semua berjalan di **satu proses**, satu thread kerja. Tidak ada server, database,
+atau koneksi jaringan — pengenalan dan suara 100% lokal.
 
-**Sebelum menjalankan aplikasi, nyalakan OBS Virtual Camera**
-(OBS → *Controls → Start Virtual Camera*). Kalau belum, worker membatalkan
-sendiri dan menampilkan pesan ini — bukan error misterius.
+**Aturan flush kata:** kalimat diucapkan ketika **tangan hilang ≥ 3 detik**
+(TECH_SPEC §4.5). Menahan satu isyarat tetap di frame tidak boleh mengucapkan
+kata yang belum selesai.
 
-Hasil pengukuran akurasi A–Z: **belum ada** (`docs/results_m2.json` belum
-dibuat), lihat [Pengukuran akurasi (M2)](#pengukuran-akurasi-m2).
+---
+
+## Struktur modul
+
+| File | Tanggung jawab |
+|---|---|
+| `main.py` | GUI PySide6/qfluentwidgets: tombol MULAI/BERHENTI, slider ukuran font, checkbox Mode debug. Thread worker dipisah dari UI. |
+| `worker.py` | Loop utama: buka webcam → deteksi → klasifikasi → smoothing → overlay → kirim ke kamera virtual. `draw_text()` adalah satu-satunya penerjemah teks (dipakai debug & produksi). |
+| `hand_detect.py` | `HandDetector` (MediaPipe Tasks, `num_hands=2`, singleton modul) dan `crop_hand()` (bbox + padding 20px, letterbox ke persegi). |
+| `recognizer.py` | `build_model()` memuat bobot EfficientNet-B3 + urutan label; `preprocess()` normalisasi 224×224; `Smoother()` kebijakan 4-dari-5. |
+| `text_pipeline.py` | Buffer huruf → kata; `tick()` memicu TTS saat tangan absen ≥ 3 detik. |
+| `tts.py` | Piper ONNX → VB-Cable "CABLE Input" (WASAPI 48 kHz), resample 22050→48000. |
+| `scripts/` | verifikasi & tooling, lihat bawah. |
+
+Rincian pipeline: [`docs/TECH_SPEC.md`](docs/TECH_SPEC.md). Pilihan model + semua
+asumsi terukur: [`docs/MODEL_SELECTION.md`](docs/MODEL_SELECTION.md).
+
+---
 
 ## Setup
 
@@ -36,91 +57,75 @@ pip install -r requirements.txt
 
 # Prasyarat di luar pip:
 # 1. OBS Studio — "OBS Virtual Camera" (kamera virtual output utama).
-#    Start Virtual Camera agar device aktif di Zoom/Meet.
 # 2. VB-Cable — https://vb-audio.com/Cable/  → mikrofon virtual "CABLE Output".
-# 3. espeak-ng — fonemisasi voice id_ID di Piper; sudah disiapkan lokal di
+# 3. espeak-ng — fonemisasi voice id_ID di Piper; sudah lokal di
 #    tools/espeak-ng/ (hasil extract MSI, tidak masuk PATH).
-#    (Opsional, ditunda: Unity Capture https://github.com/schellingb/UnityCapture)
 
 bash scripts/download_models.sh   # bobot A-Z (~44MB) + voice Piper (~63MB) + hand landmarker (~7,5MB)
 python scripts/check_env.py       # 6 cek: VB-Cable, model A-Z, model tangan, voice, espeak-ng, kamera virtual
 python main.py                    # Start / Stop + slider ukuran font overlay
 ```
 
+**Nyalakan OBS Virtual Camera sebelum MULAI** (OBS → *Controls → Start Virtual
+Camera*). Worker membatalkan sendiri dengan pesan jelas kalau device tidak aktif.
+
+---
+
 ## Pakai aplikasi
 
 1. `python main.py` → **MULAI**.
 2. Isyaratkan huruf satu per satu; pause pendek cukup untuk menambah huruf.
-3. Turunkan tangan, tunggu 3 detik → kata diucapkan (Zoom/Meet memakainya
-   sebagai mikrofon) dan overlay bersih untuk kata berikutnya.
+3. Turunkan tangan, tunggu 3 detik → kata diucapkan dan overlay bersih.
 4. Slider mengatur ukuran font overlay (10–32, langsung berlaku saat jalan).
-5. **Mode debug** (opsional): centang "Mode debug" sebelum MULAI → jendela CCTV
-   muncul, berisi bbox magenta, landmark kuning, ukuran crop, dan teks overlay.
-   `q` menutup jendela dan menghentikan worker. Demo normal: biarkan kosong.
+5. **Mode debug** (opsional): centang sebelum MULAI → jendela CCTV dengan bbox
+   magenta, landmark kuning, ukuran crop, dan teks overlay. `q` menutup jendela
+   dan menghentikan worker.
 
 Di Zoom/Meet: kamera = **"OBS Virtual Camera"**, mikrofon = **"CABLE Output"**.
-Tes lewat self-view Zoom/Meet.
 
-## Prasyarat lingkungan
+---
 
-| Komponen | Fungsi | Status |
-|---|---|---|
-| OBS Studio | kamera virtual utama "OBS Virtual Camera" | **TERPASANG** |
-| VB-Cable | mikrofon virtual "CABLE Output" | **TERPASANG** |
-| espeak-ng | fonemisasi voice Indonesia Piper | **TERPASANG** (lokal `tools/espeak-ng/`, hasil extract MSI) |
-| Unity Capture | kamera virtual alternatif bila OBS VC bermasalah | **DITUNDA, OPSIONAL** |
-| Model A-Z | EfficientNet-B3, `Syizuril/bisindo-sign-language` | diunduh via script |
-| Hand landmarker | deteksi tangan MediaPipe Tasks | diunduh via script |
-| Voice Piper | `id_ID-news_tts-medium` (ONNX) | diunduh via script |
+## Verifikasi
 
-Catatan device: playback TTS mencari perangkat dengan "CABLE" dan
-`max_output_channels > 0`, memilih WASAPI stereo 48 kHz. MME/DirectSound
-mendaftar entri ganda (16 kanal) untuk perangkat yang sama.
+Script ada di folder `scripts/`, semuanya bisa dijalankan tanpa Zoom:
 
-## Pengukuran akurasi (M2)
+| Script | Yang dibuktikan |
+|---|---|
+| `verify_m1.py` | stream worker → OBS Virtual Camera: overlay putih terbaca ulang sebagai input |
+| `verify_m36.py` | worker mulai, frame terkirim, MediaPipe menemukan tangan, model mengklasifikasi crop |
+| `verify_m5.py` | TTS offline: Piper → VB-Cable, RMS & peak diukur |
+| `test_letters.py` | uji A–Z per huruf, `--full-frame` untuk baseline frame penuh |
+| `check_env.py` | 6 prasyarat lingkungan (VB-Cable, model, voice, espeak-ng, kamera virtual) |
+
+---
+
+## Status akurasi
+
+**Angka akurasi webcam A–Z belum diukur** (`docs/results_m2.json` belum ada).
+Jangan menyebut angka akurasi sebelum:
 
 ```bash
-python scripts/test_letters.py              # kondisi aplikasi: crop + letterbox
+python scripts/test_letters.py               # kondisi aplikasi: crop + letterbox
 python scripts/test_letters.py --full-frame  # baseline: frame penuh
 ```
 
-Jalankan **keduanya di kamera & cahaya yang sama** supaya bisa dibandingkan:
-tanpa baseline full-frame, akurasi buruk tidak bisa diatribusi ke crop.
-Tulis hasilnya ke `docs/results_m2.json`; status tiap asumsi + angka yang sudah
-terukur ada di [`docs/MODEL_SELECTION.md`](docs/MODEL_SELECTION.md).
+Keduanya harus dijalankan di kamera & cahaya yang sama, supaya akurasi buruk bisa
+diatribusi ke crop atau ke model.
 
-Peringatan yang masih terbuka:
+**Sudah terukur** (detail di `docs/MODEL_SELECTION.md`):
 
-- **Asal dataset latih belum teridentifikasi** — model card tidak mencantumkan
-  dataset; kandidat publik (Kaggle/GitHub BISINDO) belum dikonfirmasi.
-- Ukuran input 224×224, normalisasi ImageNet, letterbox persegi, dan
-  `num_hands=2` masih **[ASUMSI]**.
-- Variasi regional isyarat, pencahayaan, dan jarak tangan belum diukur.
-- Akurasi 0,9860 di model card adalah **akurasi validasi latih**, bukan
-  akurasi webcam kami.
+- Crop tangan > full frame: **64% vs 23%** → model dilatih pada crop tangan,
+  jalur produksi benar.
+- Deteksi MediaPipe di citra dataset: **76/78 (97%)** → detektor sehat.
+- Preprocessing: 224×224 + ImageNet normalisasi konfigurasi terbaik
+  (65% vs 56% half, 38% raw).
 
-## Peringatan lisensi [PERLU DICEK]
+**Isu terbuka:** model dilatih dengan 9.169 citra; dataset publik BISINDO hanya
+520 citra. Retrain dari dataset publik berisiko regresi akurasi. Dataset tetap
+dipakai sebagai baseline regresi. Model weights juga tidak punya lisensi tertulis
+— hanya diunduh saat setup, tidak di-bundle.
 
-- Bobot model A–Z (`Syizuril/bisindo-sign-language`) repo **publik tanpa token**,
-  tetapi **lisensi tidak tertulis**. Hanya diunduh saat setup, tidak di-bundle,
-  tidak didistribusikan ulang sebelum lisensi terkonfirmasi.
-- Voice Piper `id-ID-news_tts-medium` (dari `rhasspy/piper-voices`) — lisensi
-  MODEL_CARD **belum diverifikasi**. Sama: unduh saat setup, jangan di-bundle.
-- MediaPipe hand landmarker: Apache-2.0 (aman dipakai).
-
-## Dokumentasi
-
-- [`docs/PRD.md`](docs/PRD.md) — latar belakang, persona, user stories, FR/AC
-- [`docs/TECH_SPEC.md`](docs/TECH_SPEC.md) — arsitektur, pipeline, integrasi
-- [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) — milestone M1–M7 + checklist demo
-- [`AGENTS.md`](AGENTS.md) — konvensi & aturan untuk coding agent
-
-## Git
-
-Format commit: `[type]: description` — type: `feat`, `fix`, `docs`, `refactor`,
-`chore`, `test`, `perf`, `build`, `ci`. Micro commit dianjurkan (lihat
-[`AGENTS.md`](AGENTS.md#git-commit)). Folder `models/`, `tools/`, dan `.venv/`
-tidak di-commit.
+---
 
 ## Privasi
 
