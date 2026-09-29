@@ -121,8 +121,10 @@ class Worker:
             cv2.rectangle(show, (int(min(xs)), int(min(ys))),
                           (int(max(xs)), int(max(ys))), (255, 0, 255), 2)
         crop_note = "-" if crop is None else f"{crop.shape[1]}x{crop.shape[0]}px"
+        tts_note = "TTS: mati" if not self.enable_tts else (
+            f"TTS: error ({self.tts_error})" if self.tts_error else "TTS: aktif")
         cv2.putText(show, f"tangan: {'ya' if marks else 'tidak'} | "
-                          f"crop: {crop_note}", (10, 24),
+                          f"crop: {crop_note} | {tts_note}", (10, 24),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         # overlay huruf: posisi & gaya sama persis dengan yang dikirim ke vcam
         draw_text(show, text, self.font_size)

@@ -1,11 +1,13 @@
-"""Pipeline teks: huruf stabil -> kata -> kalimat.
+"""Pipeline teks: huruf -> kata -> kalimat. TTS per KATA.
 
-Aturan (PRD FR-07/FR-08/AC-03):
+Aturan (diubah sesuai permintaan user):
 - huruf stabil yang BERBEDA dari huruf terakhir ditambahkan ke kata.
-- jeda 3 detik tanpa huruf baru -> kalimat selesai: diterjemahkan ke suara
-  (via tts.speak) dan buffer dibersihkan.
-- API: add_letter() tiap frame huruf stabil; tick() tiap frame untuk cek jeda;
-  sentence_ready() mengosongkan buffer kalimat.
+- tangan absen >= WORD_PAUSE (1,2 dtk) -> KATA SELESAI: diucapkan lewat TTS
+  dan ditambahkan ke buffer kalimat. Overlay tetap menampilkan kalimat+kata.
+- tangan absen >= IDLE (3 dtk) -> KALIMAT SELESAI: buffer dibersihkan,
+  tanpa TTS (sudah diucapkan per kata).
+- API: add_letter() tiap frame huruf stabil; tick() tiap frame; return kalimat
+  selesai hanya untuk status GUI, bukan untuk diucapkan.
 """
 
 from __future__ import annotations
@@ -13,7 +15,8 @@ from __future__ import annotations
 import time
 from typing import Callable, Optional
 
-IDLE_SECONDS = 3.0
+WORD_PAUSE = 1.2   # absen tangan segini -> kata selesai & diucapkan
+IDLE_SECONDS = 3.0  # absen tangan segini -> kalimat selesai (buffer bersih)
 
 
 class TextPipeline:
@@ -21,12 +24,14 @@ class TextPipeline:
         self,
         speak: Optional[Callable[[str], None]] = None,
         idle_seconds: float = IDLE_SECONDS,
+        word_pause: float = WORD_PAUSE,
     ) -> None:
         self._speak = speak
         self._idle = idle_seconds
+        self._word_pause = word_pause
         self.word = ""
+        self.sentence = ""
         self.prev_letter: Optional[str] = None
-        self._last_new: Optional[float] = None
         self._hand_present = False
         self._hand_absent_since: Optional[float] = None
 
@@ -39,7 +44,6 @@ class TextPipeline:
             return  # huruf sama ditahan sekali saja (satu ketukan = satu huruf)
         self.word += letter
         self.prev_letter = letter
-        self._last_new = self._now()
         self._hand_present = True
         self._hand_absent_since = None
 
@@ -47,63 +51,83 @@ class TextPipeline:
         """Panggil saat tangan hilang dari frame (mulai timer absen)."""
         self.prev_letter = None
         self._hand_present = False
-        if self._hand_absent_since is None and self.word:
+        if self._hand_absent_since is None and (self.word or self.sentence):
             self._hand_absent_since = self._now()
 
     def tick(self) -> Optional[str]:
-        """Flush hanya kalau tangan absen >= idle (TECH_SPEC §4.5 / FR-07).
-
-        Tangan tetap di frame -> jangan ucapkan kata yang belum selesai.
-        """
+        """Kata: absen >= word_pause -> ucapkan + simpan ke kalimat.
+        Kalimat: absen >= idle -> bersih, return untuk status GUI (tanpa TTS)."""
         if self._hand_present or self._hand_absent_since is None:
             return None
-        if self._now() - self._hand_absent_since < self._idle:
-            return None
-        if not self.word:
+        absent = self._now() - self._hand_absent_since
+
+        if absent >= self._word_pause and self.word:
+            word = self.word.strip()
+            self.word = ""
+            self.prev_letter = None
+            self.sentence = (self.sentence + word + " ").strip() + " "
+            if self._speak:
+                try:
+                    self._speak(word)
+                except Exception:
+                    pass  # TTS gagal tidak boleh mematikan loop video
+            # timer absen TETAP jalan: kalimat selesai pada idle dari absen sama
+
+        if absent >= self._idle and self.sentence:
+            done = self.sentence.strip()
+            self.sentence = ""
+            self.word = ""
+            self.prev_letter = None
             self._hand_absent_since = None
-            return None
-        spoken_sentence = self.word.strip()
-        self.word = ""
-        self.prev_letter = None
-        self._last_new = None
-        self._hand_absent_since = None
-        if self._speak:
-            try:
-                self._speak(spoken_sentence)
-            except Exception:
-                pass  # TTS gagal tidak boleh mematikan loop video
-        return spoken_sentence
+            return done
+        return None
 
     @property
     def text(self) -> str:
-        """Teks yang tampil di overlay: kata yang sedang dibentuk."""
-        return self.word
+        """Overlay: kalimat terbentuk + kata yang sedang dibentuk (spasi akhir
+        dipertahankan supaya kata berikutnya tidak menempel)."""
+        return self.sentence + self.word
 
 
 if __name__ == "__main__":
     spoken: list[str] = []
-    pipe = TextPipeline(speak=spoken.append, idle_seconds=0.2)
+    pipe = TextPipeline(speak=spoken.append, word_pause=0.2, idle_seconds=0.4)
 
     pipe.add_letter("H")
     pipe.add_letter("H")  # harus diabaikan: huruf sama
     pipe.add_letter("I")
     assert pipe.text == "HI", pipe.text
-
-    # tangan MASIH di frame -> jangan flush walau sudah 3 detik
-    time.sleep(0.3)
-    assert pipe.tick() is None, "tangan ada: kata belum selesai jangan diucapkan"
     assert spoken == [], spoken
 
-    # tangan hilang -> timer absen jalan, baru flush
+    # tangan MASIH di frame -> tidak ada yang diucapkan
+    time.sleep(0.25)
+    assert pipe.tick() is None
+    assert spoken == [], spoken
+
+    # tangan hilang 0.2 dtk -> KATA diucapkan, kalimat tersimpan
     pipe.clear_hand()
     time.sleep(0.25)
-    assert pipe.tick() == "HI", "kalimat harus siap setelah tangan hilang + jeda"
-    assert spoken == ["HI"]
-    assert pipe.text == ""
+    assert pipe.tick() is None, "kalimat belum selesai (belum idle)"
+    assert spoken == ["HI"], f"kata harus diucapkan tiap jeda: {spoken}"
+    assert pipe.text == "HI ", pipe.text
+
+    # kata kedua dalam kalimat sama
+    pipe.add_letter("D")
+    pipe.add_letter("U")
+    pipe.add_letter("A")
+    assert pipe.text == "HI DUA"
+    pipe.clear_hand()
+    time.sleep(0.25)
+    assert pipe.tick() is None
+    assert spoken == ["HI", "DUA"], spoken
+
+    # absen >= idle -> kalimat selesai (tanpa TTS tambahan), buffer bersih
+    time.sleep(0.2)
+    done = pipe.tick()
+    assert done == "HI DUA", done
+    assert spoken == ["HI", "DUA"], "kalimat TIDAK diucapkan ulang"
+    assert pipe.text == "", pipe.text
 
     # pipe kosong -> tick aman
     assert pipe.tick() is None
-
-    pipe.add_letter("O")
-    assert pipe.text == "O"
     print("text_pipeline self-check OK")
