@@ -131,8 +131,7 @@ python scripts/build_dataset.py \
    (`build_dataset.py`, `read_folders_source` → landmark None), sedangkan
    baseline memakai landmark sintetis dari sudut bbox VOC. Namun subset
    rhio-saja dari val (sebagian dari 514 crop rhio di `data/finetune`,
-   terbagi train/val menurut shuffle seed 42) memakai jalur crop sintetis
-   bbox yang IDENTIK
+   terbagi train/val menurut shuffle seed 42) memakai jalur crop sintetis bbox yang IDENTIK
    dengan `eval_offline.py`, jadi subset itu **setara langsung** dengan
    68,65% dan boleh dipakai sebagai gate regresi G1. Namun subset itu
    **tidak dapat diekstrak dari `data/finetune` saat ini**:
