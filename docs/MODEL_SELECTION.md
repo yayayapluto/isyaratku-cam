@@ -45,9 +45,9 @@ Akurasi 0,9860 itu **akurasi validasi latih**, bukan akurasi di webcam kami.
 | A4 | Crop bbox tangan + padding 20px | Divalidasi | TECH_SPEC §4.2 |
 | A5 | **Letterbox persegi** sebelum resize 224×224 | **[ASUMSI]** | Bbox tangan TINGGI; squash merusak bentuk huruf |
 | A6 | `num_hands=2` (landmark kedua tangan digabung) | **[ASUMSI]** | Sebagian huruf BISINDO memakai dua tangan |
-| A7 | Gate confidence > 0,5 sebelum huruf diterima | **[ASUMSI]** | Angka hibrida; tuning dokumentasi |
+| A7 | Gate confidence > 0,3 sebelum huruf diterima | Divalidasi | Turun dari 0,5: conf rata crop benar 0,48 |
 | A8 | Smoothing 4-dari-5 | Divalidasi | FR/AC + TEST |
-| A9 | Flush kalimat saat tangan absen ≥ 3 detik | Divalidasi | FR-07/AC-03/TECH_SPEC §4.5 |
+| A9 | Flush **kata** saat tangan absen ≥ 1,2 dtk; flush **kalimat** ≥ 3 dtk | Divalidasi | FR-07/AC-03/TECH_SPEC §4.5 |
 
 ## 4. Sudah terukur (bukan asumsi)
 

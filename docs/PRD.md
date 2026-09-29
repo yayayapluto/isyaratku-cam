@@ -71,7 +71,7 @@ dengan **SDG 3** (kesehatan & kesejahteraan melalui alat bantu komunikasi),
 | FR-04 | Tangkap frame dari **kamera default** (tanpa dropdown) | Must |
 | FR-05 | Deteksi tangan dengan MediaPipe Hands | Must |
 | FR-06 | Klasifikasi huruf A–Z dengan stabilisasi beberapa frame (FR-07) | Must |
-| FR-07 | Logika otomatis: huruf stabil → tambah ke kata; jeda tanpa tangan ±3 detik → ucapkan kata/kalimat via TTS, lalu kosongkan overlay | Must |
+| FR-07 | Logika otomatis: huruf stabil → tambah ke kata; tangan hilang ±1,2 detik → **kata** diucapkan via TTS; tangan hilang ±3 detik → kalimat selesai (buffer bersih, overlay kosong) | Must |
 | FR-08 | Gambar teks terjemahan sebagai overlay pada frame keluar | Must |
 | FR-09 | Frame keluar didorong ke kamera virtual (`pyvirtualcam`) | Must |
 | FR-10 | TTS `Piper` offline, voice `id-ID-news_tts-medium`, keluar ke VB-Cable yang terdeteksi otomatis berdasarkan nama perangkat; jika tidak ditemukan → status Error dengan pesan jelas | Must |
@@ -96,8 +96,9 @@ dengan **SDG 3** (kesehatan & kesejahteraan melalui alat bantu komunikasi),
 - **AC-01** Tombol Start → status menjadi `Berjalan` dalam ≤ 2 detik, tanpa dialog tambahan.
 - **AC-02** 20 isyarat huruf berbeda diperagakan satu per satu; minimal 17 huruf muncul benar
   pada overlay (sesuai hasil tes milestone seleksi model, dicatat).
-- **AC-03** Setelah 3 detik tanpa tangan terdeteksi, kalimat terakhir terdengar di
-  output VB-Cable dan overlay kembali kosong.
+- **AC-03** Setiap kata terdengar di output VB-Cable ±1,2 detik setelah tangan
+  hilang; setelah 3 detik tanpa tangan, kalimat terakhir terlihat di overlay lalu
+  buffer kosong dan overlay bersih.
 - **AC-04** OBS menampilkan stream "Unity Capture Camera" dengan overlay teks terbaca.
 - **AC-05** Zoom/Meet: dipilih "Unity Capture Camera" (atau OBS Virtual Camera sebagai
   fallback) → peserta lain melihat overlay; dipilih "CABLE Output" (VB-Cable) →

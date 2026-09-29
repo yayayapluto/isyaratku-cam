@@ -32,7 +32,7 @@ docs/        PRD.md TECH_SPEC.md BUILD_ORDER.md MODEL_SELECTION.md
 main.py      GUI PySide6: tombol start/stop, status, slider font
 worker.py    thread kerja: capture, deteksi, recognizer, overlay, vcam send
 recognizer.py  load model PyTorch + prediksi + smoothing 4-of-5
-text_pipeline.py huruf -> kata -> kalimat + timer jeda 3 detik
+text_pipeline.py huruf -> kata -> kalimat + timer: kata (1,2dtk) / kalimat (3dtk)
 tts.py       Piper ONNX -> device VB-Cable (cari by name)
 virtual_cam.py pyvirtualcam send + gambar overlay teks
 scripts/     download_models.sh, test_webcam.py, check_env.py

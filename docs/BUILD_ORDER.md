@@ -60,9 +60,11 @@ data sendiri — itu di luar MVP (FR-13).
 
 ## M4 — Logika huruf→kata→kalimat [FR-07]
 
-**Sel:** `text_pipeline.py` — huruf stabil → tambah ke kata; jeda tanpa tangan
-3 detik → kalimat siap diucapkan (sementara `print`), overlay dikosongkan.
-**Tes:** isyarat kata "HALO" → muncul `HALO`, berhenti 3 detik → overlay kosong.
+**Sel:** `text_pipeline.py` — huruf stabil → tambah ke kata; tangan hilang
+1,2 detik → **kata** diucapkan (TTS) + masuk buffer kalimat; tangan hilang
+3 detik → kalimat selesai (buffer bersih, overlay kosong).
+**Tes:** isyarat kata "HALO" → muncul `HALO`, tangan turun ±1,2 detik → terdengar
+"HALO"; turun 3 detik → overlay kosong.
 
 ## M5 — TTS ke mikrofon virtual [FR-10]
 
@@ -96,8 +98,8 @@ mengikuti nilai slider.
 
 1. Buka aplikasi → klik **START** (status `Berjalan`).
 2. Buka Zoom/Meet → pilih **OBS Virtual Camera** + **CABLE Output** (self-view).
-3. Peragakan isyarat `HALO SAYA RINA` → peserta membaca overlay,
-   mendengar kalimat setelah jeda 3 detik.
+3. Peragakan isyarat `HALO SAYA RINA` → peserta membaca overlay yang bertambah,
+   mendengar setiap kata ±1,2 detik setelah tangan turun.
 
 ## Rencana cadangan
 

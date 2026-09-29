@@ -49,8 +49,8 @@ flowchart TD
     S -->|label stabil| P
     P -->|huruf| T[append ke current_word]
     T --> P
-    P -->|jeda 3s tanpa tangan| SP[TTS speak sentence]
-    SP --> O[Overlay dikosongkan]
+    P -->|tangan absen 1,2s| SP[TTS speak KATA]
+    P -->|tangan absen 3s| CL[KALIMAT selesai: overlay bersih]
     F --> D[draw overlay teks]
     D --> V[vcam.send frame]
     SP --> A[Piper audio bytes]
@@ -65,9 +65,9 @@ stateDiagram-v2
     Idle --> LetterLock: huruf stabil 5 frame
     LetterLock --> Word: append huruf, reset hand timer
     Word --> Word: huruf baru stabil
-    Word --> Sentence: jeda tanpa tangan >= 3 detik
-    Sentence --> Speak: TTS
-    Speak --> Idle: overlay kosong
+    Word --> Sentence: tangan absen >= 1,2 detik
+    Sentence --> Speak: TTS KATA lalu simpan ke kalimat
+    Speak --> Idle: tangan absen >= 3 detik, overlay kosong
 ```
 
 ## 2. Struktur Folder
@@ -114,14 +114,18 @@ Max ~600 baris kode inti; kandidat rujukan sebelum menulis kode baru:
    jika ≥ 4 dari 5 identik. Mencegah jitter sajian demo.
 4. **Huruf→kata**: saat label stabil dan berbeda dari label terakhir yang
    diterima → append ke `current_word`, reset `hand_absent_timer`.
-5. **Kalimat otomatis**: tangan **hilang** ≥ 3 detik → `speak(current_word)`
-   via Piper, lalu buffer dibersihkan dan overlay bersih (FR-07/AC-03).
-   Menahan satu isyarat tetap di frame **tidak** boleh mengucapkan kata yang
-   belum selesai. Tangan hilang juga mereset `prev_letter` + smoothing, supaya
-   huruf pertama kata berikutnya tidak tertahan.
-6. Overlay digambar sebagai **subtitle film**: teks putih dengan outline hitam
-   tebal, terpusat horizontal, baseline 8% di atas bawah frame. Tanpa band
-   gelap (sesuai referensi `contoh penempatan subtitle.png`).
+5. **Kata otomatis**: tangan **hilang** ≥ 1,2 detik → `speak(word)` via Piper
+   (antre, thread daemon — audio tidak boleh menghentikan loop video), kata
+   ditambahkan ke buffer kalimat (FR-07/AC-03).
+6. **Kalimat selesai**: tangan **hilang** ≥ 3 detik → buffer kalimat dibersih
+   dan overlay kosong. Kalimat **tidak** diucapkan ulang: sudah diucapkan per
+   kata. Menahan satu isyarat tetap di frame **tidak** boleh mengucapkan kata
+   yang belum selesai (`mark_present()` tiap frame tangan ada).
+7. Overlay digambar sebagai **subtitle film**: teks putih dengan halo hitam
+   tipis, terpusat, wrap per kata selebar frame, baseline 8% di atas bawah
+   frame. Tanpa band gelap (sesuai referensi `contoh penempatan subtitle.png`).
+   Catatan batas: `WORD_PAUSE=1,2 detik` juga memisahkan huruf dalam satu kata;
+   jeda antar-huruf lebih dari itu akan memecah kata.
 
 Pseudo:
 
@@ -134,13 +138,18 @@ on label:
     last_letter = label
     word += label
     hand_absent_since = None                  # tangan ada: belum flush
+    mark_present()                            # TIAP frame tangan ada
 
-tick():  # tiap frame
+tick():  # tiap frame (termasuk cabang tanpa tangan!)
     if no_hand:
         last_letter = None; stable.clear()   # huruf pertama kata berikutnya bebas
         if hand_absent_since is None: hand_absent_since = now
-    if word and hand_absent_since and now - hand_absent_since >= 3.0:
-        tts.speak(word); word = ""; hand_absent_since = None
+    if hand_absent_since and now - hand_absent_since >= 1.2:
+        if word:                              # KATA selesai -> diucapkan
+            tts.speak_async(word); sentence += word + " "; word = ""
+        if now - hand_absent_since >= 3.0:    # KALIMAT selesai -> bersih
+            sentence = ""
+            hand_absent_since = None
 ```
 
 ## 5. Integrasi Kamera Virtual + Audio Virtual + Piper

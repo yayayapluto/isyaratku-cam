@@ -18,17 +18,24 @@ webcam (native res) → flip → MediaPipe Hands (num_hands=2)
   → resize 224×224, ImageNet norm (recognizer.py)
   → EfficientNet-B3 A–Z → confidence
   → Smoother 4-dari-5 (recognizer.py)
-  → huruf → kata (text_pipeline.py)
-  → overlay subtitle putih (worker.py) → OBS Virtual Camera
-                        └→ tangan absen 3 detik → Piper TTS → VB-Cable
+  → huruf → kata → kalimat (text_pipeline.py)
+  → overlay subtitle putih, wrap baris (worker.py) → OBS Virtual Camera
+                        └→ tangan absen 1,2 dtk → Piper TTS per KATA → VB-Cable
 ```
 
-Semua berjalan di **satu proses**, satu thread kerja. Tidak ada server, database,
-atau koneksi jaringan — pengenalan dan suara 100% lokal.
+Semua berjalan di **satu proses**, satu thread video + satu thread audio (TTS).
+Tidak ada server, database, atau koneksi jaringan — 100% lokal.
 
-**Aturan flush kata:** kalimat diucapkan ketika **tangan hilang ≥ 3 detik**
-(TECH_SPEC §4.5). Menahan satu isyarat tetap di frame tidak boleh mengucapkan
-kata yang belum selesai.
+**Aturan flush:**
+
+| Kondisi | Aksi |
+|---|---|
+| Tangan ada di frame | kata belum selesai, tidak ada ucapan |
+| Tangan hilang ≥ 1,2 dtk | **kata** diucapkan + masuk buffer kalimat |
+| Tangan hilang ≥ 3 dtk | kalimat selesai, buffer bersih, overlay kosong |
+
+Batas yang perlu diketahui: `WORD_PAUSE=1,2 dtk` juga memisahkan huruf dalam
+satu kata — jeda antar-huruf lebih dari itu akan memecah kata.
 
 ---
 
@@ -40,8 +47,8 @@ kata yang belum selesai.
 | `worker.py` | Loop utama: buka webcam → deteksi → klasifikasi → smoothing → overlay → kirim ke kamera virtual. `draw_text()` adalah satu-satunya penerjemah teks (dipakai debug & produksi). |
 | `hand_detect.py` | `HandDetector` (MediaPipe Tasks, `num_hands=2`, singleton modul) dan `crop_hand()` (bbox + padding 20px, letterbox ke persegi). |
 | `recognizer.py` | `build_model()` memuat bobot EfficientNet-B3 + urutan label; `preprocess()` normalisasi 224×224; `Smoother()` kebijakan 4-dari-5. |
-| `text_pipeline.py` | Buffer huruf → kata; `tick()` memicu TTS saat tangan absen ≥ 3 detik. |
-| `tts.py` | Piper ONNX → VB-Cable "CABLE Input" (WASAPI 48 kHz), resample 22050→48000. |
+| `text_pipeline.py` | Buffer huruf → kata → kalimat; `tick()` memicu TTS per kata (tangan absen ≥ 1,2 dtk) dan membersihkan buffer saat kalimat selesai (≥ 3 dtk). `mark_present()` dipanggil tiap frame tangan ada agar timer absen tidak salah jalan. |
+| `tts.py` | Piper ONNX → VB-Cable "CABLE Input" (WASAPI 48 kHz), resample 22050→48000. `speak_async()` antre + thread daemon (backlog maks 2) supaya audio tidak menghentikan loop video; `drain()` tunggu kata terakhir saat BERHENTI. |
 | `scripts/` | verifikasi & tooling, lihat bawah. |
 
 Rincian pipeline: [`docs/TECH_SPEC.md`](docs/TECH_SPEC.md). Pilihan model + semua
@@ -75,7 +82,7 @@ Camera*). Worker membatalkan sendiri dengan pesan jelas kalau device tidak aktif
 
 1. `python main.py` → **MULAI**.
 2. Isyaratkan huruf satu per satu; pause pendek cukup untuk menambah huruf.
-3. Turunkan tangan, tunggu 3 detik → kata diucapkan dan overlay bersih.
+3. Turunkan tangan ±1,2 detik → **kata** diucapkan dan masuk kalimat; overlay tetap menampilkan kalimat + kata berikutnya. Tangan turun ±3 detik → kalimat selesai, overlay bersih.
 4. Slider mengatur ukuran font overlay (10–32, langsung berlaku saat jalan).
 5. **Mode debug** (opsional): centang sebelum MULAI → jendela CCTV dengan bbox
    magenta, landmark kuning, ukuran crop, dan teks overlay. `q` menutup jendela
