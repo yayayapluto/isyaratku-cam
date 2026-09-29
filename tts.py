@@ -79,9 +79,10 @@ def speak_async(text: str) -> None:
         _queue = queue.Queue()
         threading.Thread(target=_tts_worker, daemon=True,
                          name="isyaratku-tts").start()
-    # ponytail: backlog maks 2 — Piper lebih lambat dari laju kata, dan suara
-    # tertunda tak berguna kalau isyarat sudah berlanjut.
-    while _queue.qsize() > 2:
+    # Antrean dibiarkan panjang: kata yang dibuang di tengah jalan terdengar
+    # terpotong. Backlog dibersihkan hanya kalau sudah terlalu jauh (>6),
+    # supaya ucapan tetap natural walau user berhenti agak terlambat.
+    while _queue.qsize() > 6:
         _queue.get_nowait()
         _queue.task_done()
     _queue.put(text)
