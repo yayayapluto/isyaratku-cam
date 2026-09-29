@@ -10,8 +10,10 @@ tetapi tidak dapat berbicara. Subtema: **"Akses untuk Semua"** (SDG 3, 10, 16).
 
 ## Status
 
-M1 selesai — walking skeleton webcam → overlay → OBS Virtual Camera jalan
-(diuji E2E). Milestone & urutan build: [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md).
+M1–M6 selesai: webcam → deteksi tangan MediaPipe → crop bbox → model A–Z →
+smoothing 4-dari-5 → pipeline huruf→kata→kalimat → overlay → OBS Virtual
+Camera + suara Piper ke "CABLE Output". GUI (`python main.py`) sudah teruji.
+Milestone & urutan build: [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md).
 
 ## Setup
 
@@ -38,7 +40,7 @@ python main.py
 |---|---|---|
 | OBS Studio | kamera virtual utama "OBS Virtual Camera" | installer resmi; "Start Virtual Camera" — **TERPASANG** |
 | VB-Cable | mikrofon virtual "CABLE Output" | installer resmi — **TERPASANG** |
-| espeak-ng | fonemisasi voice Indonesia Piper | installer `.exe` dari release GitHub — **BELUM TERPASANG** |
+| espeak-ng | fonemisasi voice Indonesia Piper | terpasang lokal: extract MSI ke `tools/espeak-ng/` — **TERPASANG** |
 | Unity Capture | kamera virtual alternatif bila OBS VC bermasalah | `Install.bat` sebagai Administrator — **DITUNDA, OPSIONAL** |
 | Model A-Z | bobot EfficientNet-B3 dari `Syizuril/bisindo-sign-language` | `scripts/download_models.sh` |
 | Voice Piper | `id_ID-news_tts-medium` (ONNX) | `scripts/download_models.sh` |
