@@ -86,14 +86,18 @@ python scripts/test_letters.py --full-frame  # baseline: frame penuh
 
 Jalankan **keduanya di kamera & cahaya yang sama** supaya bisa dibandingkan:
 tanpa baseline full-frame, akurasi buruk tidak bisa diatribusi ke crop.
-Tulis hasilnya ke `docs/MODEL_SELECTION.md` sebelum menyebut angka akurasi.
+Tulis hasilnya ke `docs/results_m2.json`; status tiap asumsi + angka yang sudah
+terukur ada di [`docs/MODEL_SELECTION.md`](docs/MODEL_SELECTION.md).
 
-Peringatan yang masih terbuka (jangan lulus sebelum diuji):
+Peringatan yang masih terbuka:
 
-- Ukuran input 224×224 dan normalisasi ImageNet adalah **[ASUMSI]** — model card
-  tidak mendokumentasikannya.
-- Letterbox persegi di crop adalah **[ASUMSI]** tentang cara data latih disiapkan.
+- **Asal dataset latih belum teridentifikasi** — model card tidak mencantumkan
+  dataset; kandidat publik (Kaggle/GitHub BISINDO) belum dikonfirmasi.
+- Ukuran input 224×224, normalisasi ImageNet, letterbox persegi, dan
+  `num_hands=2` masih **[ASUMSI]**.
 - Variasi regional isyarat, pencahayaan, dan jarak tangan belum diukur.
+- Akurasi 0,9860 di model card adalah **akurasi validasi latih**, bukan
+  akurasi webcam kami.
 
 ## Peringatan lisensi [PERLU DICEK]
 
