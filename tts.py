@@ -28,6 +28,20 @@ class TtsUnavailable(RuntimeError):
     """Device/model/espeak tidak siap."""
 
 
+
+def _com_init() -> None:
+    """WASAPI minta COM di thread pemanggil. Thread main sudah punya (Qt), tapi
+    thread daemon TTS tidak — tanpa ini `sd.play` gagal PaErrorCode -9999
+    ('usbTerminalGUID') dan setiap kata HILANG tanpa suara. Idempoten:
+    -9999 hilang tetap, CoInitializeEx ulang tak apa (S_FALSE diabaikan)."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
+    except Exception as exc:  # TTS jangan mati karena ini
+        print(f"[tts] CoInitializeEx dilewati: {type(exc).__name__}: {exc}")
 def _ensure_espeak() -> None:
     """Cari espeak-ng: PATH dulu, lalu kopi lokal tools/espeak-ng/ (extract MSI)."""
     if shutil.which("espeak-ng"):
@@ -95,12 +109,10 @@ def speak_async(text: str) -> None:
     """Antre ucapan; thread daemon memulainya. Tidak pernah menahan loop video:
     worker video tetap mengirim frame selagi audio diputar terpisah."""
     _ensure_worker()
-    # Antrean dibiarkan panjang: kata yang dibuang di tengah jalan terdengar
-    # terpotong. Backlog dibersihkan hanya kalau sudah terlalu jauh (>6),
-    # supaya ucapan tetap natural walau user berhenti agak terlambat.
-    while _queue.qsize() > 6:
-        _queue.get_nowait()
-        _queue.task_done()
+    # TANPA pemotongan backlog: dulu antrean dipangkas ke 6, isyarat cepat
+    # >6 kata buang kata di tengah/akhir tanpa suara = "terpotong di akhir".
+    # Semua kata tetap diputar sampai habis; backpressure bawaan producer
+    # (word_pause 1,2 s) sudah lebih cepat dari konsumsi (~0,6 s/kata).
     _queue.put(text)
 
 
@@ -114,6 +126,7 @@ def last_error() -> str:
 
 def _tts_worker() -> None:
     global _last_error
+    _com_init()  # WASAPI butuh COM di thread ini; tanpa ini audio mati total
     while True:
         text = _queue.get()
         try:
